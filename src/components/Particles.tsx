@@ -64,10 +64,16 @@ export default function ParticleScene({
   variant = "coast",
   compact = false,
   imageUrl,
+  imageUrls,
+  imageFocus,
+  activeSlide = 0,
 }: {
   variant?: SceneVariant;
   compact?: boolean;
   imageUrl?: string;
+  imageUrls?: string[];
+  imageFocus?: number[];
+  activeSlide?: number;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const motion: MotionRef = useRef({
@@ -155,15 +161,6 @@ export default function ParticleScene({
       motion.current.targetY = 0;
       motion.current.targetHover = 0;
     };
-    const press = (event: PointerEvent) => {
-      if (reducedMedia.matches || variant !== "coast") return;
-      const rect = element.getBoundingClientRect();
-      motion.current.pressX =
-        ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      motion.current.pressY =
-        1 - ((event.clientY - rect.top) / rect.height) * 2;
-      motion.current.press += 1;
-    };
     const scroll = () => {
       const rect = parent.getBoundingClientRect();
       motion.current.targetScroll = MathUtils.clamp(
@@ -173,11 +170,12 @@ export default function ParticleScene({
         1,
       );
     };
-    scroll();
-    interaction.addEventListener("pointermove", move, { passive: true });
-    interaction.addEventListener("pointerleave", leave, { passive: true });
-    interaction.addEventListener("pointerdown", press, { passive: true });
-    window.addEventListener("scroll", scroll, { passive: true });
+    if (variant !== "coast") {
+      scroll();
+      interaction.addEventListener("pointermove", move, { passive: true });
+      interaction.addEventListener("pointerleave", leave, { passive: true });
+      window.addEventListener("scroll", scroll, { passive: true });
+    }
     return () => {
       observer.disconnect();
       document.removeEventListener("visibilitychange", visibility);
@@ -185,7 +183,6 @@ export default function ParticleScene({
       coarseMedia.removeEventListener("change", updatePreferences);
       interaction.removeEventListener("pointermove", move);
       interaction.removeEventListener("pointerleave", leave);
-      interaction.removeEventListener("pointerdown", press);
       window.removeEventListener("scroll", scroll);
       parent.style.removeProperty("--scene-x");
       parent.style.removeProperty("--scene-y");
@@ -222,15 +219,22 @@ export default function ParticleScene({
             }}
             fallback={fallback}
           >
-            <MotionController
-              motion={motion}
-              reduced={reduced}
-              surface={surface}
-              parallax={variant === "delivery" ? false : variant}
-            />
-            {variant === "coast" ? (
+            {variant !== "coast" && (
+              <MotionController
+                motion={motion}
+                reduced={reduced}
+                surface={surface}
+                parallax={variant === "photo" ? "photo" : false}
+              />
+            )}
+            {variant === "coast" && imageUrls ? (
               <Suspense fallback={null}>
-                <CoastEffects motion={motion} reduced={reduced} />
+                <CoastEffects
+                  imageUrls={imageUrls}
+                  imageFocus={imageFocus}
+                  activeSlide={activeSlide}
+                  reduced={reduced}
+                />
               </Suspense>
             ) : variant === "photo" && imageUrl ? (
               <Suspense fallback={null}>

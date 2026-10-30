@@ -30,7 +30,6 @@ import {
   Clock3,
   Globe2,
   Grid2X2,
-  Handshake,
   Heart,
   House,
   Leaf,
@@ -75,6 +74,7 @@ import {
   RequestsPage,
 } from "./pages";
 import { ParticleHeading } from "./components/ParticleHeading";
+import { HeroCarousel } from "./components/HeroCarousel";
 const ParticleScene = lazy(() => import("./components/Particles"));
 const categoryIcons: Record<string, typeof House> = {
   all: Grid2X2,
@@ -526,54 +526,7 @@ function Home({
             <ArrowUpRight size={17} />
           </a>
         </div>
-        <div className="hero-visual">
-          <div className="hero-photo-shell">
-            <img
-              className="hero-photo"
-              src="/images/kotor.jpg"
-              alt="Терракотовые крыши Котора на берегу Бока-Которского залива"
-              fetchPriority="high"
-            />
-          </div>
-          <div className="hero-shade" />
-          <Suspense fallback={null}>
-            <ParticleScene />
-          </Suspense>
-          <span className="photo-location">
-            <MapPin size={13} />
-            Котор, Черногория
-          </span>
-          <div className="hero-photo-title">
-            Маленькая страна.
-            <br />
-            <em>Большое чувство дома.</em>
-          </div>
-          <div className="floating-trust">
-            <div className="trust-icon">
-              <Handshake size={23} />
-            </div>
-            <div>
-              <strong>Свои люди — рядом</strong>
-              <span>От первой заявки до результата</span>
-            </div>
-            <span className="tiny-sparkle">✳</span>
-          </div>
-          <div className="photo-pagination">
-            <span />
-            <span />
-            <span />
-          </div>
-          <span className="visual-stamp">
-            <svg width="44" height="44" viewBox="0 0 44 44">
-              <path
-                d="M22 3v38M5.5 12.5l33 19M5.5 31.5l33-19"
-                stroke="currentColor"
-                strokeWidth="5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </span>
-        </div>
+        <HeroCarousel />
       </section>
       <section className="discovery-section" aria-label="Поиск предложений">
         <form className="search-bar" onSubmit={submit}>
