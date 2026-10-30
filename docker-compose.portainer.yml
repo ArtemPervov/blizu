@@ -1,0 +1,59 @@
+# Paste into a Portainer Docker Standalone stack after building/pushing both images.
+# This file intentionally uses images only: the Portainer web editor cannot build context.
+name: blizu
+services:
+  api:
+    image: ${BLIZU_IMAGE_PREFIX:-blizu}-api:${BLIZU_VERSION:-latest}
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      APP_ORIGIN: ${APP_ORIGIN:?Set the public HTTPS origin}
+      ENABLE_DEMO: ${ENABLE_DEMO:-false}
+      DELIVERY_STALE_HOURS: ${DELIVERY_STALE_HOURS:-72}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set the arbiter email}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set a strong arbiter password}
+      DATA_DIR: /app/data
+      PORT: 3001
+    volumes:
+      - blizu_data:/app/data
+    networks:
+      - app
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+  web:
+    image: ${BLIZU_IMAGE_PREFIX:-blizu}-web:${BLIZU_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    expose:
+      - "8080"
+    networks:
+      app:
+      proxy:
+        aliases: [blizu-web]
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+volumes:
+  blizu_data:
+    name: blizu_data
+networks:
+  app:
+    internal: true
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-proxy}

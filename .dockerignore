@@ -1,0 +1,11 @@
+node_modules
+data
+.env
+.env.*
+.context
+.git
+dist
+dist-server
+coverage
+*.log
+docs
