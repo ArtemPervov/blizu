@@ -1,0 +1,195 @@
+.hero-section-large {
+  grid-template-columns: 0.92fr 1.14fr;
+  gap: 48px;
+}
+.particle-heading {
+  position: relative;
+  isolation: isolate;
+  margin: 22px 0 19px;
+}
+.hero-copy .particle-heading h1 {
+  margin: 0;
+  transition: opacity 0.65s ease;
+}
+.particle-heading[data-phase="pending"] h1,
+.particle-heading[data-phase="assembling"] h1 {
+  opacity: 0;
+}
+.heading-particle-scene {
+  position: absolute;
+  inset: -38px auto;
+  left: 50%;
+  width: calc(100% + 48px);
+  max-width: calc(100vw - 40px);
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 2;
+}
+@media (max-width: 760px) {
+  .particle-heading {
+    margin: 18px 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-copy .particle-heading h1 {
+    transition: none;
+  }
+}
+.hero-section-large .hero-visual {
+  height: 448px;
+  border-radius: 20px;
+}
+.hero-section-large .hero-photo-shell,
+.hero-section-large .hero-shade,
+.hero-section-large .scene-coast {
+  border-radius: inherit;
+}
+.hero-section-large .floating-trust {
+  top: auto;
+  bottom: 144px;
+}
+.hero-section-large .hero-photo-title {
+  font-size: 27px;
+  bottom: 60px;
+}
+.hero-section-large .hero-photo-title em {
+  font-size: 28px;
+}
+.listing-grid.catalog-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 27px;
+}
+.listing-card--immersive {
+  border-radius: 17px;
+  box-shadow: 0 5px 22px #30432505;
+}
+.listing-card--immersive:hover,
+.listing-card--immersive:focus-within {
+  box-shadow: 0 18px 42px #30432512;
+}
+.listing-card--immersive .listing-image {
+  aspect-ratio: 1.32;
+  isolation: isolate;
+}
+.listing-card--immersive .listing-image img,
+.listing-card--immersive:hover .listing-image img {
+  filter: saturate(0.86) contrast(1.025);
+  transform: translate3d(var(--photo-x, 0px), var(--photo-y, 0px), 0)
+    scale(1.065);
+}
+.listing-card--immersive .listing-image--active img {
+  transition: none;
+}
+.listing-card--immersive .scene-photo {
+  z-index: 1;
+  border-radius: 0;
+}
+.listing-card--immersive .image-tag,
+.listing-card--immersive .save-button {
+  z-index: 3;
+}
+.listing-card--immersive .image-tag {
+  top: 15px;
+  left: 15px;
+  padding: 7px 10px;
+  font-size: 10px;
+  border: 1px solid #ffffff75;
+  border-radius: 7px;
+}
+.listing-card--immersive .save-button {
+  top: 14px;
+  right: 14px;
+  width: 35px;
+  height: 35px;
+}
+.listing-card--immersive .save-button svg {
+  width: 18px;
+  height: 18px;
+}
+.listing-card--immersive .listing-body {
+  padding: 21px 22px 18px;
+}
+.listing-card--immersive .listing-location,
+.listing-card--immersive .listing-location .rating,
+.listing-card--immersive .provider-line {
+  font-size: 12px;
+}
+.listing-card--immersive .rating span {
+  font-size: 10px;
+}
+.listing-card--immersive .listing-title {
+  font-size: 17px;
+  line-height: 1.5;
+  min-height: 51px;
+  margin: 13px 0;
+}
+.listing-card--immersive .provider-line .mini-avatar {
+  width: 25px;
+  height: 25px;
+  font-size: 11px;
+}
+.listing-card--immersive .listing-bottom {
+  margin-top: 18px;
+  padding-top: 16px;
+}
+.listing-card--immersive .listing-bottom strong {
+  font-size: 21px;
+}
+.listing-card--immersive .listing-bottom .small {
+  font-size: 11px;
+}
+.listing-card--immersive .card-arrow {
+  width: 34px;
+  height: 34px;
+}
+.catalog-grid .skeleton-card > span {
+  aspect-ratio: 1.32;
+}
+@media (max-width: 1100px) {
+  .hero-section-large {
+    gap: 32px;
+  }
+  .hero-section-large .hero-visual {
+    height: 410px;
+  }
+  .hero-section-large .hero-photo-title,
+  .hero-section-large .hero-photo-title em {
+    font-size: 23px;
+  }
+}
+@media (max-width: 980px) {
+  .listing-grid.catalog-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+  }
+}
+@media (max-width: 760px) {
+  .hero-section-large {
+    grid-template-columns: 1fr;
+    gap: 27px;
+  }
+  .hero-section-large .hero-visual {
+    height: 350px;
+  }
+  .hero-section-large .floating-trust {
+    top: 85px;
+    bottom: auto;
+  }
+  .hero-section-large .hero-photo-title,
+  .hero-section-large .hero-photo-title em {
+    font-size: 24px;
+  }
+}
+@media (max-width: 600px) {
+  .listing-grid.catalog-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 25px;
+  }
+  .listing-card--immersive .listing-image {
+    aspect-ratio: 1.34;
+  }
+  .listing-card--immersive .listing-title {
+    min-height: 0;
+    font-size: 18px;
+  }
+}

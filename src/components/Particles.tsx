@@ -1,11 +1,20 @@
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Component, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Component,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { MathUtils } from "three";
 import { CoastEffects } from "./effects/CoastEffects";
 import { ParcelModel } from "./effects/ParcelModel";
+import { PhotoEffects } from "./effects/PhotoEffects";
 import type { MotionRef } from "./effects/motion";
+import { supportsWebGL } from "./effects/webgl";
 
-type SceneVariant = "coast" | "delivery";
+type SceneVariant = "coast" | "delivery" | "photo";
 
 function MotionController({
   motion,
@@ -16,7 +25,7 @@ function MotionController({
   motion: MotionRef;
   reduced: boolean;
   surface: HTMLElement | null;
-  parallax: boolean;
+  parallax: "coast" | "photo" | false;
 }) {
   useFrame((_, delta) => {
     const m = motion.current;
@@ -26,10 +35,13 @@ function MotionController({
     m.y = MathUtils.damp(m.y, reduced ? 0 : m.targetY, 4, step);
     m.hover = MathUtils.damp(m.hover, reduced ? 0 : m.targetHover, 4, step);
     m.scroll = MathUtils.damp(m.scroll, reduced ? 0 : m.targetScroll, 3, step);
-    if (surface && parallax) {
+    if (surface && parallax === "coast") {
       surface.style.setProperty("--scene-x", `${m.x * 9}px`);
       surface.style.setProperty("--scene-y", `${m.y * 7}px`);
       surface.style.setProperty("--scene-scroll", `${m.scroll * 9}px`);
+    } else if (surface && parallax === "photo") {
+      surface.style.setProperty("--photo-x", `${m.x * 7}px`);
+      surface.style.setProperty("--photo-y", `${m.y * 5}px`);
     }
   }, -2);
   return null;
@@ -51,9 +63,11 @@ class CanvasBoundary extends Component<
 export default function ParticleScene({
   variant = "coast",
   compact = false,
+  imageUrl,
 }: {
   variant?: SceneVariant;
   compact?: boolean;
+  imageUrl?: string;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const motion: MotionRef = useRef({
@@ -102,20 +116,14 @@ export default function ParticleScene({
         parent.style.setProperty("--scene-x", "0px");
         parent.style.setProperty("--scene-y", "0px");
         parent.style.setProperty("--scene-scroll", "0px");
+        parent.style.setProperty("--photo-x", "0px");
+        parent.style.setProperty("--photo-y", "0px");
       }
     };
     updatePreferences();
     reducedMedia.addEventListener("change", updatePreferences);
     coarseMedia.addEventListener("change", updatePreferences);
-    // Release the capability probe before mounting the actual R3F renderer.
-    try {
-      const probe = document.createElement("canvas");
-      const context = probe.getContext("webgl2") || probe.getContext("webgl");
-      setWebgl(Boolean(context));
-      context?.getExtension("WEBGL_lose_context")?.loseContext();
-    } catch {
-      setWebgl(false);
-    }
+    setWebgl(supportsWebGL());
     const observer = new IntersectionObserver(
       ([entry]) => setInView(entry.isIntersecting),
       { threshold: 0.02 },
@@ -182,6 +190,8 @@ export default function ParticleScene({
       parent.style.removeProperty("--scene-x");
       parent.style.removeProperty("--scene-y");
       parent.style.removeProperty("--scene-scroll");
+      parent.style.removeProperty("--photo-x");
+      parent.style.removeProperty("--photo-y");
     };
   }, [variant, compact]);
   const fallback =
@@ -200,8 +210,8 @@ export default function ParticleScene({
         <CanvasBoundary fallback={fallback}>
           <Canvas
             camera={{
-              position: [0, 0, variant === "coast" ? 5 : 7],
-              fov: variant === "coast" ? 52 : 40,
+              position: [0, 0, variant === "delivery" ? 7 : 5],
+              fov: variant === "delivery" ? 40 : 52,
             }}
             dpr={coarse ? 1 : [1, 1.5]}
             frameloop={inView && pageVisible && !reduced ? "always" : "demand"}
@@ -216,18 +226,28 @@ export default function ParticleScene({
               motion={motion}
               reduced={reduced}
               surface={surface}
-              parallax={variant === "coast"}
+              parallax={variant === "delivery" ? false : variant}
             />
             {variant === "coast" ? (
-              <CoastEffects motion={motion} coarse={coarse} reduced={reduced} />
-            ) : (
+              <Suspense fallback={null}>
+                <CoastEffects motion={motion} reduced={reduced} />
+              </Suspense>
+            ) : variant === "photo" && imageUrl ? (
+              <Suspense fallback={null}>
+                <PhotoEffects
+                  motion={motion}
+                  imageUrl={imageUrl}
+                  reduced={reduced}
+                />
+              </Suspense>
+            ) : variant === "delivery" ? (
               <ParcelModel
                 motion={motion}
                 coarse={coarse}
                 compact={compact}
                 reduced={reduced}
               />
-            )}
+            ) : null}
           </Canvas>
         </CanvasBoundary>
       ) : (

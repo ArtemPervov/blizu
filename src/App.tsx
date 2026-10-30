@@ -74,6 +74,7 @@ import {
   RequestPage,
   RequestsPage,
 } from "./pages";
+import { ParticleHeading } from "./components/ParticleHeading";
 const ParticleScene = lazy(() => import("./components/Particles"));
 const categoryIcons: Record<string, typeof House> = {
   all: Grid2X2,
@@ -498,17 +499,13 @@ function Home({
   }
   return (
     <>
-      <section className="hero-section">
+      <section className="hero-section hero-section-large">
         <div className="hero-copy">
           <span className="eyebrow">
             <span className="live-dot" />
             {t.near}
           </span>
-          <h1>
-            {t.hero1}
-            <br />
-            <span>{t.hero2}</span>
-          </h1>
+          <ParticleHeading first={t.hero1} second={t.hero2} />
           <p className="hero-description">{t.intro}</p>
           <div className="hero-social">
             <div className="avatar-stack">
@@ -715,8 +712,8 @@ function Home({
           </div>
         )}
         {isPending ? (
-          <div className="listing-grid">
-            {[1, 2, 3, 4].map((i) => (
+          <div className="listing-grid catalog-grid">
+            {[1, 2, 3].map((i) => (
               <div className="skeleton-card" key={i}>
                 <span />
                 <i />
@@ -728,9 +725,9 @@ function Home({
         ) : error ? (
           <ErrorState error={error} retry={refetch} />
         ) : data?.items.length ? (
-          <div className="listing-grid">
+          <div className="listing-grid catalog-grid">
             {data.items.map((l) => (
-              <ListingCard listing={l} key={l.id} />
+              <ListingCard listing={l} key={l.id} immersive />
             ))}
           </div>
         ) : (

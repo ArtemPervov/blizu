@@ -1,4 +1,11 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   X,
   LoaderCircle,
@@ -14,6 +21,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Listing } from "../../shared/types";
 import { api, json, euro, useAuth, useI18n, useToast } from "../lib";
+const ParticleScene = lazy(() => import("./Particles"));
 
 export function Brand() {
   return (
@@ -126,7 +134,15 @@ export function Modal({
     </dialog>
   );
 }
-export function ListingCard({ listing }: { listing: Listing }) {
+export function ListingCard({
+  listing,
+  immersive = false,
+}: {
+  listing: Listing;
+  immersive?: boolean;
+}) {
+  const [photoActive, setPhotoActive] = useState(false);
+  const image = listing.image || "/images/home.jpg";
   const { user } = useAuth();
   const { t } = useI18n();
   const toast = useToast();
@@ -150,15 +166,38 @@ export function ListingCard({ listing }: { listing: Listing }) {
     onError: (e) => toast(e.message),
   });
   return (
-    <article className="listing-card">
-      <div className="listing-image">
+    <article
+      className={`listing-card${immersive ? " listing-card--immersive" : ""}`}
+      onFocusCapture={() => {
+        if (immersive) setPhotoActive(true);
+      }}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget))
+          setPhotoActive(false);
+      }}
+    >
+      <div
+        className={`listing-image${photoActive ? " listing-image--active" : ""}`}
+        onPointerEnter={(event) => {
+          if (immersive && event.pointerType === "mouse") setPhotoActive(true);
+        }}
+        onPointerLeave={(event) => {
+          if (
+            !event.currentTarget
+              .closest("article")
+              ?.contains(document.activeElement)
+          )
+            setPhotoActive(false);
+        }}
+      >
         <Link to={`/listings/${listing.id}`} tabIndex={-1} aria-hidden="true">
-          <img
-            src={listing.image || "/images/home.jpg"}
-            alt=""
-            loading="lazy"
-          />
+          <img src={image} alt="" loading="lazy" />
         </Link>
+        {immersive && photoActive && (
+          <Suspense fallback={null}>
+            <ParticleScene variant="photo" imageUrl={image} />
+          </Suspense>
+        )}
         <span className="image-tag">
           {listing.tags[0] || "Местное предложение"}
         </span>
