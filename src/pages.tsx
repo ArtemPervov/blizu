@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -9,7 +9,6 @@ import {
   Check,
   CheckCheck,
   CircleAlert,
-  CircleCheck,
   Clock3,
   ExternalLink,
   FileImage,
@@ -31,7 +30,6 @@ import {
   type Incident,
   type Listing,
   type Offer,
-  type Order,
   type OrderDetail,
   type OrderStatus,
   type ServiceRequest,
@@ -47,7 +45,6 @@ import {
 } from "./components/ui";
 import type { CreateAction } from "./App";
 import { useMarket } from "./market-state";
-const ParticleScene = lazy(() => import("./components/Particles"));
 
 function LoginRequired({ onLogin }: { onLogin: () => void }) {
   return (
@@ -62,7 +59,13 @@ function LoginRequired({ onLogin }: { onLogin: () => void }) {
     </Empty>
   );
 }
-function RequestCard({ item }: { item: ServiceRequest }) {
+export function RequestCard({
+  item,
+  showStatus = false,
+}: {
+  item: ServiceRequest;
+  showStatus?: boolean;
+}) {
   return (
     <Link className="request-card" to={`/requests/${item.id}`}>
       <div
@@ -85,6 +88,15 @@ function RequestCard({ item }: { item: ServiceRequest }) {
               ? "Доставка"
               : CATEGORIES.find((c) => c.id === item.category)?.name}
           </span>
+          {showStatus && (
+            <span className={`request-state request-state-${item.status}`}>
+              {item.status === "open"
+                ? "Открыта"
+                : item.status === "assigned"
+                  ? "Исполнитель выбран"
+                  : "Закрыта"}
+            </span>
+          )}
         </div>
         <h3>{item.title}</h3>
         <p>{item.description}</p>
@@ -579,381 +591,6 @@ export function ListingPage({ create }: { create: CreateAction }) {
   );
 }
 
-export function DeliveryPage({ create }: { create: CreateAction }) {
-  return (
-    <div className="page-shell">
-      <section className="delivery-hero">
-        <div>
-          <span className="eyebrow">
-            <Package size={15} />
-            ВАЖНОЕ ПРИЕДЕТ
-          </span>
-          <h1>
-            Расстояние —<br />
-            <span>только часть пути.</span>
-          </h1>
-          <p>
-            Товары из РФ, Китая и Европы — с понятной стоимостью и историей
-            каждого этапа. От ссылки до «забрал, спасибо».
-          </p>
-          <button className="button primary" onClick={() => create("delivery")}>
-            Рассчитать доставку
-            <ArrowUpRight size={18} />
-          </button>
-          <span className="delivery-hero-note">
-            <ShieldCheck size={15} />
-            Условия до заказа. Оплата при встрече.
-          </span>
-        </div>
-        <div className="parcel-art">
-          <Suspense
-            fallback={
-              <div className="parcel-fallback">
-                <span>✳</span>
-              </div>
-            }
-          >
-            <ParticleScene variant="delivery" />
-          </Suspense>
-          <span className="route-badge route-rf">
-            RU <span>Москва</span>
-          </span>
-          <span className="route-badge route-china">
-            CN <span>Шанхай</span>
-          </span>
-          <span className="route-badge route-me">
-            <span className="live-dot" />
-            ME <span>Черногория</span>
-          </span>
-          <div className="parcel-status">
-            <span className="status-check">
-              <Check size={16} />
-            </span>
-            <div>
-              <strong>Всё под контролем</strong>
-              <span>Каждый этап — в вашем заказе</span>
-            </div>
-          </div>
-        </div>
-      </section>
-      <div className="section-header section-space">
-        <div>
-          <span className="section-kicker">ПОНЯТНО НА КАЖДОМ ЭТАПЕ</span>
-          <h2>Как доберётся ваша покупка</h2>
-        </div>
-        <Link className="text-link" to="/dashboard">
-          Мои доставки
-          <ArrowUpRight size={17} />
-        </Link>
-      </div>
-      <div className="delivery-steps">
-        {[
-          [
-            Plus,
-            "Оставьте ссылку",
-            "Что за товар, откуда и в какой город доставить.",
-          ],
-          [
-            Handshake,
-            "Выберите логиста",
-            "Сравните итоговую цену и срок в откликах.",
-          ],
-          [
-            Truck,
-            "Следите за дорогой",
-            "От склада до Черногории — статусы всегда под рукой.",
-          ],
-          [
-            CircleCheck,
-            "Заберите покупку",
-            "Подтвердите получение. Рассчитайтесь напрямую.",
-          ],
-        ].map(([Icon, title, description], i) => {
-          const I = Icon as typeof Plus;
-          return (
-            <div className="content-card" key={String(title)}>
-              <span className="delivery-step-icon">
-                <I size={25} />
-              </span>
-              <span className="step-index">0{i + 1}</span>
-              <h3>{String(title)}</h3>
-              <p>{String(description)}</p>
-            </div>
-          );
-        })}
-      </div>
-      <section className="request-callout">
-        <div className="callout-doodle">
-          <ShieldCheck size={42} strokeWidth={1.3} />
-        </div>
-        <div>
-          <h2>Если путь оказался непростым</h2>
-          <p>
-            Откройте спор в заказе и приложите фото. Арбитр поможет разобраться.
-            <br />
-            Если статус долго не меняется, система сама создаст инцидент.
-          </p>
-        </div>
-        <Link className="button dark" to="/dashboard">
-          Перейти к заказам
-          <ArrowRight size={17} />
-        </Link>
-      </section>
-    </div>
-  );
-}
-
-type Dashboard = {
-  orders: Order[];
-  requests: ServiceRequest[];
-  listings: Listing[];
-  incidents: Incident[];
-};
-export function DashboardPage({
-  create,
-  requireLogin,
-}: {
-  create: CreateAction;
-  requireLogin: () => void;
-}) {
-  const { user, loading } = useAuth();
-  const [tab, setTab] = useState("orders");
-  const { data, isPending, error, refetch } = useQuery({
-    queryKey: ["dashboard", user?.id],
-    queryFn: () => api<Dashboard>("/dashboard"),
-    enabled: !!user,
-    refetchInterval: 30000,
-  });
-  if (loading)
-    return (
-      <div className="page-shell">
-        <Loading />
-      </div>
-    );
-  if (!user)
-    return (
-      <div className="page-shell">
-        <LoginRequired onLogin={requireLogin} />
-      </div>
-    );
-  const tabs = [
-    ["orders", "Заказы", data?.orders.length],
-    ["requests", "Мои заявки", data?.requests.length],
-    ...(user.role === "provider"
-      ? [["listings", "Предложения", data?.listings.length]]
-      : []),
-    ...(user.role === "arbiter"
-      ? [
-          [
-            "incidents",
-            "Споры",
-            data?.incidents.filter((i) => i.status === "open").length,
-          ],
-        ]
-      : []),
-  ];
-  return (
-    <div className="page-shell">
-      <div className="page-heading heading-with-action">
-        <div>
-          <span className="section-kicker">ВАШ ЛИЧНЫЙ УГОЛОК</span>
-          <h1>
-            {user.role === "arbiter"
-              ? "Помогаем договориться"
-              : `Здравствуйте, ${user.name.split(" ")[0]}`}
-            <span className="heading-dot">.</span>
-          </h1>
-          <p>
-            {user.role === "arbiter"
-              ? "Все споры, история договорённостей и решения."
-              : "Заявки, заказы и хорошие люди — всё под рукой."}
-          </p>
-        </div>
-        <button
-          className="button primary"
-          onClick={() =>
-            create(user.role === "provider" ? "listing" : "request")
-          }
-        >
-          <Plus size={18} />
-          {user.role === "provider" ? "Добавить предложение" : "Создать заявку"}
-        </button>
-      </div>
-      <div className="dashboard-stats">
-        <div>
-          <span className="stat-icon">
-            <Package size={20} />
-          </span>
-          <strong>
-            {data?.orders.filter(
-              (o) => !["completed", "resolved"].includes(o.status),
-            ).length ?? 0}
-          </strong>
-          <span>заказов в работе</span>
-        </div>
-        <div>
-          <span className="stat-icon">
-            <MessageCircle size={20} />
-          </span>
-          <strong>
-            {data?.requests.filter((r) => r.status === "open").length ?? 0}
-          </strong>
-          <span>открытых заявок</span>
-        </div>
-        <div>
-          <span className="stat-icon">
-            <ShieldCheck size={20} />
-          </span>
-          <strong>{user.rating.toFixed(1)}</strong>
-          <span>ваш рейтинг</span>
-        </div>
-      </div>
-      <div className="pill-tabs dashboard-tabs">
-        {tabs.map(([value, label, count]) => (
-          <button
-            className={tab === value ? "active" : ""}
-            aria-pressed={tab === value}
-            key={String(value)}
-            onClick={() => setTab(String(value))}
-          >
-            {label}
-            <span>{count ?? 0}</span>
-          </button>
-        ))}
-      </div>
-      {isPending ? (
-        <Loading />
-      ) : error ? (
-        <ErrorState error={error} retry={refetch} />
-      ) : tab === "orders" ? (
-        data?.orders.length ? (
-          <div className="order-list">
-            {data.orders.map((o) => (
-              <Link
-                key={o.id}
-                className="order-card content-card"
-                to={`/orders/${o.id}`}
-              >
-                <span
-                  className={`order-type-icon ${o.kind === "delivery" ? "blue-bg" : ""}`}
-                >
-                  {o.kind === "delivery" ? (
-                    <Truck size={25} />
-                  ) : (
-                    <Handshake size={25} />
-                  )}
-                </span>
-                <div>
-                  <span className="muted small">
-                    {o.kind === "delivery" ? "Доставка" : "Услуга"} · {o.city}
-                  </span>
-                  <h3>{o.title}</h3>
-                  <span className="muted small">
-                    {o.customerId === user.id ? o.providerName : o.customerName}
-                  </span>
-                </div>
-                <span className={`status-pill status-${o.status}`}>
-                  {STATUS_LABELS[o.status]}
-                </span>
-                <strong>{euro(o.price)}</strong>
-                <ArrowUpRight size={19} />
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <Empty
-            title="Здесь начнутся хорошие дела"
-            description="Создайте заявку и выберите отклик — заказ появится здесь."
-          >
-            <button
-              className="button primary"
-              onClick={() => create("request")}
-            >
-              Создать заявку
-            </button>
-          </Empty>
-        )
-      ) : tab === "requests" ? (
-        data?.requests.length ? (
-          <div className="request-list">
-            {data.requests.map((r) => (
-              <RequestCard key={r.id} item={r} />
-            ))}
-          </div>
-        ) : (
-          <Empty title="Вы ещё не создавали заявки">
-            <button
-              className="button primary"
-              onClick={() => create("request")}
-            >
-              Создать первую
-            </button>
-          </Empty>
-        )
-      ) : tab === "listings" ? (
-        data?.listings.length ? (
-          <div className="listing-grid">
-            {data.listings.map((l) => (
-              <Link
-                className="content-card"
-                to={`/listings/${l.id}`}
-                key={l.id}
-              >
-                <img className="dashboard-listing-image" src={l.image} alt="" />
-                <h3>{l.title}</h3>
-                <p>
-                  {euro(l.price)} / {l.unit}
-                </p>
-                <span className="text-link">
-                  Открыть предложение
-                  <ArrowUpRight size={16} />
-                </span>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <Empty title="Покажите, чем можете помочь">
-            <button
-              className="button primary"
-              onClick={() => create("listing")}
-            >
-              Добавить предложение
-            </button>
-          </Empty>
-        )
-      ) : data?.incidents.length ? (
-        <div className="order-list">
-          {data.incidents.map((i) => (
-            <Link
-              key={i.id}
-              className="order-card content-card"
-              to={`/orders/${i.orderId}`}
-            >
-              <span className="order-type-icon">
-                <CircleAlert size={24} />
-              </span>
-              <div>
-                <h3>{i.title}</h3>
-                <p className="muted small">
-                  {i.customerName} · {i.providerName}
-                </p>
-              </div>
-              <span
-                className={`status-pill ${i.status === "open" ? "status-disputed" : "status-completed"}`}
-              >
-                {i.status === "open" ? "Нужно решение" : "Решение принято"}
-              </span>
-              <ArrowUpRight size={19} />
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <Empty title="Всё спокойно" description="Открытых споров нет." />
-      )}
-    </div>
-  );
-}
-
 export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
   const { id } = useParams();
   const { user, loading } = useAuth();
@@ -1039,9 +676,9 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
     action && (action.status === "completed" ? owner : provider);
   return (
     <div className="page-shell">
-      <Link className="back-link" to="/dashboard">
+      <Link className="back-link" to="/orders">
         <ArrowLeft size={16} />
-        Мои дела
+        Все заказы
       </Link>
       <div className="page-heading">
         <span className="section-kicker">

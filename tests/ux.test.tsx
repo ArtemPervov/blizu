@@ -71,9 +71,8 @@ HTMLCanvasElement.prototype.getContext = (() =>
   null) as typeof HTMLCanvasElement.prototype.getContext;
 
 const React = await import("react");
-const { render, screen, within, fireEvent, waitFor, cleanup, configure } = await import(
-  "@testing-library/react"
-);
+const { render, screen, within, fireEvent, waitFor, cleanup, configure } =
+  await import("@testing-library/react");
 configure({ asyncUtilTimeout: 5000 });
 const { MemoryRouter } = await import("react-router-dom");
 const { QueryClient, QueryClientProvider } = await import(
@@ -117,13 +116,12 @@ beforeEach(() => {
       "http://blizu.test",
     );
     if (init.body) operation = operation.send(JSON.parse(String(init.body)));
-    const promise = operation.then(
-      (response) =>
-        new Response(JSON.stringify(response.body), {
-          status: response.status,
-          headers: { "Content-Type": "application/json" },
-        }),
-    );
+    const promise = operation.then((response) => {
+      return new Response(JSON.stringify(response.body), {
+        status: response.status,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
     inflight.add(promise);
     promise.finally(() => inflight.delete(promise));
     return promise;
@@ -244,7 +242,9 @@ test("mobile filter dialog applies real results and changing a city resets pagin
     target: { value: "20" },
   });
   fireEvent.click(dialog.getByRole("button", { name: "Применить фильтры" }));
-  await waitFor(() => assert.ok(!screen.queryByRole("dialog")));
+  await waitFor(() => {
+    if (screen.queryByRole("dialog")) throw new Error("Dialog is still open");
+  });
   await waitFor(() =>
     assert.equal(screen.getAllByRole("article").length, expected.length),
   );
@@ -344,7 +344,9 @@ test("a request draft survives closing and disappears only after successful publ
   fireEvent.click(
     dialog.getByRole("button", { name: "Создать заявку", exact: true }),
   );
-  await waitFor(() => assert.ok(!screen.queryByRole("dialog")));
+  await waitFor(() => {
+    if (screen.queryByRole("dialog")) throw new Error("Dialog is still open");
+  });
   assert.ok(
     await screen.findByRole("heading", {
       name: "Нужна помощь с квартирой",
@@ -381,4 +383,168 @@ test("guest favorites transfer into an account only after explicit action", asyn
   await screen.findByRole("link", { name: saved[0].title, exact: true });
   const response = await agent.get("/api/favorites").expect(200);
   assert.ok(response.body.ids.includes(saved[0].id));
+});
+
+test("delivery keeps the product link and origin through guest sign-in without publishing a request", async () => {
+  mount("/delivery");
+  const form = within(screen.getByRole("form", { name: "Заявка на доставку" }));
+  const productUrl = "https://shop.example/product?id=2";
+  fireEvent.change(form.getByLabelText("Ссылка на покупку"), {
+    target: { value: productUrl },
+  });
+  fireEvent.change(form.getByLabelText("Страна отправления"), {
+    target: { value: "Китай" },
+  });
+  fireEvent.submit(screen.getByRole("form", { name: "Заявка на доставку" }));
+  const auth = within(
+    await screen.findByRole("dialog", { name: "С возвращением" }),
+  );
+  fireEvent.click(
+    await auth.findByRole("button", { name: "Заказчик", exact: true }),
+  );
+  const create = within(
+    await screen.findByRole("dialog", { name: "Доставим то, чего не хватает" }),
+  );
+  assert.equal(
+    (create.getByLabelText("Ссылка на товар") as HTMLInputElement).value,
+    productUrl,
+  );
+  assert.equal(
+    (create.getByLabelText("Откуда доставить") as HTMLSelectElement).value,
+    "Китай",
+  );
+  const dashboard = await agent.get("/api/dashboard").expect(200);
+  assert.ok(
+    !dashboard.body.requests.some(
+      (r: { productUrl: string }) => r.productUrl === productUrl,
+    ),
+  );
+  fireEvent.click(create.getByRole("button", { name: "Закрыть", exact: true }));
+  assert.equal(
+    (form.getByLabelText("Ссылка на покупку") as HTMLInputElement).value,
+    productUrl,
+  );
+});
+
+test("orders restore filters from a link, search real orders, sort prices and recover from an empty result", async () => {
+  await agent.post("/api/auth/demo").send({ role: "customer" }).expect(200);
+  for (const [id, title, amount, status] of [
+    ["finished-order", "Уборка квартиры", 30, "completed"],
+    ["disputed-order", "Ремонт техники", 90, "disputed"],
+  ]) {
+    fixture.store.run(
+      "INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      id,
+      "demo-customer",
+      "demo-provider",
+      null,
+      title,
+      "service",
+      "Бар",
+      amount,
+      status,
+      "2026-01-01T10:00:00.000Z",
+      "2026-01-02T10:00:00.000Z",
+    );
+  }
+  mount("/orders?kind=delivery&phase=active");
+  let list = within(
+    await screen.findByRole("list", { name: "Список заказов" }),
+  );
+  assert.equal(list.getAllByRole("listitem").length, 1);
+  assert.ok(list.getByRole("heading", { name: "Посылка из Европы в Будву" }));
+  const phases = within(
+    screen.getByRole("group", { name: "Состояние заказов" }),
+  );
+  assert.equal(
+    phases
+      .getByRole("button", { name: /^Активные/ })
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
+  await waitFor(() =>
+    assert.equal(
+      within(screen.getByRole("list", { name: "Список заказов" })).getAllByRole(
+        "listitem",
+      ).length,
+      3,
+    ),
+  );
+  fireEvent.change(screen.getByLabelText("Сортировка заказов"), {
+    target: { value: "price" },
+  });
+  list = within(screen.getByRole("list", { name: "Список заказов" }));
+  assert.ok(
+    within(list.getAllByRole("listitem")[0]).getByRole("heading", {
+      name: "Уборка квартиры",
+    }),
+  );
+  fireEvent.click(phases.getByRole("button", { name: /^Споры/ }));
+  assert.ok(
+    within(screen.getByRole("list", { name: "Список заказов" })).getByRole(
+      "heading",
+      { name: "Ремонт техники" },
+    ),
+  );
+  fireEvent.change(screen.getByLabelText("Поиск по заказам"), {
+    target: { value: "несуществующий" },
+  });
+  assert.ok(screen.getByRole("heading", { name: "Таких заказов пока нет" }));
+  fireEvent.click(screen.getByRole("button", { name: "Показать все заказы" }));
+  fireEvent.click(phases.getByRole("button", { name: /^Завершённые/ }));
+  assert.equal(
+    within(screen.getByRole("list", { name: "Список заказов" })).getAllByRole(
+      "listitem",
+    ).length,
+    1,
+  );
+  assert.ok(screen.getByRole("heading", { name: "Уборка квартиры" }));
+});
+
+test("personal workspace links to the order list and preserves provider-only listings", async () => {
+  await agent.post("/api/auth/demo").send({ role: "provider" }).expect(200);
+  mount("/dashboard");
+  await screen.findByRole("heading", { name: "Последние заказы" });
+  const tabs = within(
+    screen.getByRole("navigation", { name: "Разделы кабинета" }),
+  );
+  assert.ok(!tabs.queryByRole("button", { name: /^Споры/ }));
+  fireEvent.click(tabs.getByRole("button", { name: /^Предложения/ }));
+  const collection = within(
+    await screen.findByRole("region", { name: "Мои предложения" }),
+  );
+  const response = await agent.get("/api/dashboard").expect(200);
+  assert.equal(
+    collection.getAllByRole("article").length,
+    response.body.listings.length,
+  );
+  fireEvent.click(
+    within(
+      screen.getByRole("navigation", { name: "Личное пространство" }),
+    ).getByRole("link", { name: "Мои заказы" }),
+  );
+  assert.ok(
+    await screen.findByRole("heading", { level: 1, name: "Мои заказы." }),
+  );
+});
+
+test("private orders require sign-in and arbiter workspace exposes disputes", async () => {
+  mount("/orders");
+  assert.ok(await screen.findByRole("button", { name: "Войти в аккаунт" }));
+  assert.ok(!screen.queryByRole("list", { name: "Список заказов" }));
+  cleanup();
+  client.clear();
+  await Promise.allSettled([...inflight]);
+  await agent.post("/api/auth/demo").send({ role: "arbiter" }).expect(200);
+  mount("/dashboard?tab=incidents");
+  const tabs = within(
+    await screen.findByRole("navigation", { name: "Разделы кабинета" }),
+  );
+  assert.ok(!tabs.queryByRole("button", { name: /^Предложения/ }));
+  assert.equal(
+    tabs.getByRole("button", { name: /^Споры/ }).getAttribute("aria-pressed"),
+    "true",
+  );
+  assert.ok(await screen.findByRole("region", { name: "Споры" }));
 });

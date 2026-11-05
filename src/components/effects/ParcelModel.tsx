@@ -6,7 +6,6 @@ import {
   Shape,
   SRGBColorSpace,
   type Group,
-  type Mesh,
 } from "three";
 import type { MotionRef } from "./motion";
 
@@ -43,15 +42,15 @@ function ShippingLabel() {
     canvas.width = 256;
     canvas.height = 160;
     const context = canvas.getContext("2d")!;
-    context.fillStyle = "#fffdf2";
+    context.fillStyle = "#fffef9";
     context.fillRect(0, 0, 256, 160);
-    context.fillStyle = "#53664e";
+    context.fillStyle = "#28646d";
     context.font = "bold 38px sans-serif";
     context.fillText("blizu.", 20, 49);
-    context.fillStyle = "#c46b45";
+    context.fillStyle = "#6d6a64";
     context.font = "17px sans-serif";
     context.fillText("RU / EU / CN  →  ME", 20, 78);
-    context.fillStyle = "#64725b";
+    context.fillStyle = "#28646d";
     let x = 20;
     for (let i = 0; i < 43; i++) {
       const w = i % 3 === 0 ? 4 : 2;
@@ -72,44 +71,21 @@ function ShippingLabel() {
 }
 
 function Orbit({
-  motion,
   radius,
   tilt,
-  phase,
   color,
   coarse,
 }: {
-  motion: MotionRef;
   radius: number;
   tilt: [number, number, number];
-  phase: number;
   color: string;
   coarse: boolean;
 }) {
-  const bead = useRef<Mesh>(null);
-  useFrame(() => {
-    if (!bead.current) return;
-    const angle = motion.current.time * 0.28 + phase;
-    bead.current.position.set(
-      Math.cos(angle) * radius,
-      Math.sin(angle) * radius,
-      0,
-    );
-  });
   return (
     <group rotation={tilt} scale={[1, 0.69, 1]}>
       <mesh>
         <torusGeometry args={[radius, 0.006, 4, coarse ? 64 : 96]} />
-        <meshBasicMaterial color={color} transparent opacity={0.38} />
-      </mesh>
-      <mesh ref={bead}>
-        <sphereGeometry args={[0.065, 12, 12]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={color}
-          emissiveIntensity={0.25}
-          roughness={0.4}
-        />
+        <meshBasicMaterial color={color} transparent opacity={0.28} />
       </mesh>
     </group>
   );
@@ -148,49 +124,43 @@ export function ParcelModel({
     <>
       <ambientLight intensity={2.2} />
       <directionalLight position={[3, 5, 5]} intensity={3} color="#fff1d6" />
-      <directionalLight position={[-3, 0, 2]} intensity={1.1} color="#bcd4c0" />
+      <directionalLight position={[-3, 0, 2]} intensity={1.1} color="#c4e0de" />
       <group ref={world} scale={compact ? 1.03 : 1.1}>
         <Orbit
-          motion={motion}
           radius={2.02}
           tilt={[0.35, 0.3, -0.35]}
-          phase={0}
-          color="#dba46a"
+          color="#7fa9a9"
           coarse={coarse}
         />
         <Orbit
-          motion={motion}
           radius={2.12}
           tilt={[-0.7, -0.2, 0.5]}
-          phase={2.3}
-          color="#93af8a"
+          color="#7c989b"
           coarse={coarse}
         />
         {!coarse && (
           <Orbit
-            motion={motion}
             radius={1.93}
             tilt={[0.9, -0.3, -0.9]}
-            phase={4.4}
-            color="#cc8d70"
+            color="#bcbaad"
             coarse={coarse}
           />
         )}
         <group ref={carton} scale={1.28}>
           <mesh geometry={geometry}>
-            <meshStandardMaterial color="#cda577" roughness={0.85} />
+            <meshStandardMaterial color="#d5c8ac" roughness={0.85} />
           </mesh>
           <mesh position={[0, 0.644, 0]}>
             <boxGeometry args={[1.61, 0.025, 1.29]} />
-            <meshStandardMaterial color="#e5c798" roughness={0.8} />
+            <meshStandardMaterial color="#e5dbc5" roughness={0.8} />
           </mesh>
           <mesh>
             <boxGeometry args={[0.27, 1.34, 1.32]} />
-            <meshStandardMaterial color="#ecdbb3" roughness={0.95} />
+            <meshStandardMaterial color="#75918e" roughness={0.95} />
           </mesh>
           <mesh position={[-0.37, 0.37, 0.656]}>
             <planeGeometry args={[0.42, 0.11]} />
-            <meshBasicMaterial color="#dfbd8e" />
+            <meshBasicMaterial color="#b4c6bf" />
           </mesh>
           <ShippingLabel />
         </group>

@@ -1,13 +1,13 @@
 :root {
-  --canvas: #f8f7f5;
+  --canvas: #f7f5f0;
   --surface: #ffffff;
-  --surface-subtle: #f0eeeb;
-  --ink: #2b2729;
-  --muted: #71676b;
-  --accent: #804657;
-  --accent-strong: #633343;
-  --accent-soft: #f2e8ec;
-  --border: #e5dfe1;
+  --surface-subtle: #efede6;
+  --ink: #282826;
+  --muted: #6d6a64;
+  --accent: #28646d;
+  --accent-strong: #1e5058;
+  --accent-soft: #e3eff0;
+  --border: #e2ded5;
   --paper: var(--surface);
   --soft: var(--surface-subtle);
   --orange: var(--accent);
@@ -2046,14 +2046,14 @@ textarea:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
-/* Porcelain, graphite and a single muted wine accent. */
+/* Editorial typography and compact catalogue controls. */
 main,
 .header-inner,
 .site-footer {
   max-width: 1328px;
 }
 .site-header {
-  background: #f8f7f5f2;
+  background: #f7f5f0e0;
 }
 .header-inner {
   height: 78px;
@@ -2135,12 +2135,12 @@ main,
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
-  box-shadow: 0 6px 28px #2b172a04;
+  box-shadow: 0 6px 28px #28282604;
   text-align: left;
 }
 .discovery-search:focus-within {
-  border-color: #a87d8a;
-  box-shadow: 0 0 0 3px #8046570a;
+  border-color: #86a8aa;
+  box-shadow: 0 0 0 3px #28646d0a;
 }
 .discovery-search-field {
   display: flex;
@@ -2273,7 +2273,7 @@ main,
 .discovery-categories button[aria-pressed="true"] {
   background: var(--accent-soft);
   color: var(--accent);
-  border-color: #e9d9e0;
+  border-color: #cfdfdf;
 }
 .discovery-categories button:hover {
   color: var(--accent);
@@ -2362,7 +2362,7 @@ main,
 }
 .listing-card:hover {
   box-shadow: none;
-  border-color: #c9b8be;
+  border-color: #a6bdbc;
 }
 .listing-image img,
 .listing-card:hover .listing-image img {
@@ -2414,7 +2414,7 @@ main,
 .discovery-filter-chips button {
   background: var(--accent-soft);
   color: var(--accent);
-  border-color: #e9d9e0;
+  border-color: #cfdfdf;
 }
 .discovery-request-banner {
   display: flex;
@@ -2442,7 +2442,7 @@ main,
   flex-shrink: 0;
   background: transparent;
   color: var(--accent);
-  border-color: #cfb6c0;
+  border-color: #a6bdbc;
 }
 .discovery-request-banner > .button:hover {
   background: var(--accent-soft);

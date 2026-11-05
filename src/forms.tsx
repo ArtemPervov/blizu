@@ -17,6 +17,10 @@ import { api, json, useAuth, useToast } from "./lib";
 import { Field, FormError, Modal } from "./components/ui";
 
 export type CreateKind = "request" | "delivery" | "listing";
+export type CreatePreset = Partial<Listing> & {
+  productUrl?: string;
+  origin?: string;
+};
 const categoryImage: Record<string, string> = {
   repair: "repair",
   food: "food",
@@ -222,12 +226,12 @@ export function CreateModal({
   onClose,
 }: {
   kind: CreateKind;
-  preset?: Partial<Listing>;
+  preset?: CreatePreset;
   onClose: () => void;
 }) {
   const { user } = useAuth();
   const [kind, setKind] = useState(initialKind);
-  const draftKey = `blizu.draft.${user?.id}.${preset?.id ?? "new"}`;
+  const draftKey = `blizu.draft.${user?.id}.${preset?.id ?? preset?.productUrl ?? "new"}`;
   const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>(
     () => {
       try {
@@ -400,7 +404,7 @@ export function CreateModal({
                 <Link2 size={17} />
                 <input
                   name="productUrl"
-                  defaultValue={draft.productUrl ?? ""}
+                  defaultValue={draft.productUrl ?? preset?.productUrl ?? ""}
                   required
                   type="url"
                   pattern="https?://.*"
@@ -410,7 +414,10 @@ export function CreateModal({
               </div>
             </Field>
             <Field label="Откуда доставить">
-              <select name="origin" defaultValue={draft.origin ?? "Россия"}>
+              <select
+                name="origin"
+                defaultValue={draft.origin ?? preset?.origin ?? "Россия"}
+              >
                 <option>Россия</option>
                 <option>Китай</option>
                 <option>Европа</option>

@@ -21,6 +21,7 @@ import {
   Menu,
   MessageCircle,
   Plus,
+  Package,
   UserRound,
   X,
 } from "lucide-react";
@@ -33,22 +34,19 @@ import {
   ListingCard,
   Loading,
 } from "./components/ui";
-import { AuthModal, CreateModal, type CreateKind } from "./forms";
 import {
-  DashboardPage,
-  DeliveryPage,
-  ListingPage,
-  OrderPage,
-  RequestPage,
-  RequestsPage,
-} from "./pages";
+  AuthModal,
+  CreateModal,
+  type CreateKind,
+  type CreatePreset,
+} from "./forms";
+import { ListingPage, OrderPage, RequestPage, RequestsPage } from "./pages";
+import { DeliveryPage } from "./DeliveryPage";
+import { DashboardPage, OrdersPage } from "./WorkspacePages";
 import { DiscoverPage } from "./DiscoverPage";
 import { CompareTray } from "./components/CompareTray";
 import { useMarket } from "./market-state";
-export type CreateAction = (
-  kind: CreateKind,
-  preset?: Partial<Listing>,
-) => void;
+export type CreateAction = (kind: CreateKind, preset?: CreatePreset) => void;
 
 export default function App() {
   const { user, logout } = useAuth();
@@ -60,7 +58,7 @@ export default function App() {
   const [authOpen, setAuthOpen] = useState(false);
   const [create, setCreate] = useState<{
     kind: CreateKind;
-    preset?: Partial<Listing>;
+    preset?: CreatePreset;
   } | null>(null);
   const [userMenu, setUserMenu] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -226,7 +224,11 @@ export default function App() {
                       </small>
                       <Link to="/dashboard">
                         <UserRound size={16} />
-                        {t.orders}
+                        Личный кабинет
+                      </Link>
+                      <Link to="/orders">
+                        <Package size={16} />
+                        Мои заказы
                       </Link>
                       <Link to="/favorites">
                         <Heart size={16} />
@@ -300,7 +302,8 @@ export default function App() {
             <NavLink to="/">{t.services}</NavLink>
             <NavLink to="/requests">{t.requests}</NavLink>
             <NavLink to="/delivery">{t.delivery}</NavLink>
-            <NavLink to="/dashboard">{t.orders}</NavLink>
+            <NavLink to="/dashboard">Личный кабинет</NavLink>
+            <NavLink to="/orders">Мои заказы</NavLink>
             <button onClick={() => createAction("request")}>
               Создать заявку
             </button>
@@ -346,6 +349,15 @@ export default function App() {
             path="/dashboard"
             element={
               <DashboardPage
+                create={createAction}
+                requireLogin={() => setAuthOpen(true)}
+              />
+            }
+          />
+          <Route
+            path="/orders"
+            element={
+              <OrdersPage
                 create={createAction}
                 requireLogin={() => setAuthOpen(true)}
               />

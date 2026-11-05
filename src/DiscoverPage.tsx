@@ -375,9 +375,13 @@ export function DiscoverPage({
           <h1 id="discover-title">
             Всё нужное. <span>Совсем рядом.</span>
           </h1>
-          <p>Местные услуги, хорошие мастера и полезные находки.</p>
+          <p>
+            Хорошие мастера, полезные находки и помощь в повседневных делах.
+            <br className="hero-copy-break" /> Чуть меньше хлопот — чуть больше
+            Черногории.
+          </p>
           <form
-            className="discovery-search"
+            className="discovery-search glass-panel"
             role="search"
             onSubmit={(event) => {
               event.preventDefault();
@@ -464,6 +468,23 @@ export function DiscoverPage({
                 <X size={13} />
               </button>
             )}
+          </div>
+          <div className="discovery-hero-links">
+            <button onClick={() => create("request")}>
+              Не знаете, кого искать?{" "}
+              <span>
+                Опишите задачу
+                <ArrowUpRight size={14} />
+              </span>
+            </button>
+            <span className="hero-link-divider" />
+            <Link to="/delivery">
+              Покупка из другой страны?{" "}
+              <span>
+                Найдём логиста
+                <ArrowUpRight size={14} />
+              </span>
+            </Link>
           </div>
         </div>
       </section>
@@ -666,6 +687,9 @@ export function DiscoverPage({
       </section>
       <section className="discovery-request-banner">
         <div>
+          <span className="section-kicker">
+            НЕ НУЖНО РАЗБИРАТЬСЯ ВО ВСЁМ САМОМУ
+          </span>
           <h2>Нужна помощь с вашей задачей?</h2>
           <p>Расскажите о ней. Исполнители предложат свои условия.</p>
         </div>
