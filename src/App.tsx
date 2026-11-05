@@ -46,6 +46,7 @@ import { DashboardPage, OrdersPage } from "./WorkspacePages";
 import { DiscoverPage } from "./DiscoverPage";
 import { CompareTray } from "./components/CompareTray";
 import { useMarket } from "./market-state";
+import { BrandSpark } from "./components/BrandIllustration";
 export type CreateAction = (kind: CreateKind, preset?: CreatePreset) => void;
 
 export default function App() {
@@ -192,7 +193,7 @@ export default function App() {
                               queryKey: ["notifications"],
                             }),
                           )
-                          .catch((e) => toast(e.message));
+                          .catch((e) => toast(e.message, "error"));
                       }
                     }}
                   >
@@ -249,7 +250,10 @@ export default function App() {
                   )}
                   {notificationsOpen && (
                     <div className="dropdown notifications-dropdown">
-                      <strong>Уведомления</strong>
+                      <strong>
+                        <BrandSpark />
+                        Уведомления
+                      </strong>
                       {notifications?.items.length ? (
                         notifications.items.map((n) => (
                           <Link key={n.id} to={n.href}>
@@ -499,7 +503,7 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
       qc.invalidateQueries({ queryKey: ["favorites"] });
       toast("Избранное перенесено в аккаунт");
     },
-    onError: (error) => toast(error.message),
+    onError: (error) => toast(error.message, "error"),
   });
   const { t } = useI18n();
   const ids = useQuery({
@@ -550,6 +554,7 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
       ) : !user && !items?.length ? (
         <Empty
           title="Сохраните полезные контакты"
+          illustration="favorites"
           description="Нажимайте сердечко на карточках. Ваши находки останутся на этом устройстве."
         >
           <button className="button primary" onClick={requireLogin}>
@@ -569,6 +574,7 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
       ) : (
         <Empty
           title="Соберите своё избранное"
+          illustration="favorites"
           description="Нажимайте на сердечко у предложений, которые хотите сохранить."
         >
           <Link className="button primary" to="/">

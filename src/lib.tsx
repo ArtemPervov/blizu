@@ -1,12 +1,16 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
+  useRef,
   type ReactNode,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { User } from "../shared/types";
+import { Check, CircleAlert, X } from "lucide-react";
+import { BrandSpark } from "./components/BrandIllustration";
 
 export async function api<T = Record<string, unknown>>(
   path: string,
@@ -228,20 +232,55 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   );
 }
 export const useI18n = () => useContext(I18nContext);
-const ToastContext = createContext<(text: string) => void>(null!);
+type ToastTone = "info" | "success" | "error";
+const ToastContext = createContext<(text: string, tone?: ToastTone) => void>(
+  null!,
+);
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState<{
+    id: number;
+    text: string;
+    tone: ToastTone;
+  } | null>(null);
+  const serial = useRef(0);
+  const notify = useCallback(
+    (text: string, tone: ToastTone = "info") =>
+      setToast(text ? { id: ++serial.current, text, tone } : null),
+    [],
+  );
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(""), 4000);
+    const timer = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(timer);
   }, [toast]);
   return (
-    <ToastContext.Provider value={setToast}>
+    <ToastContext.Provider value={notify}>
       {children}
       {toast && (
-        <div className="toast" role="status">
-          {toast}
+        <div
+          className="toast glass-panel"
+          key={toast.id}
+          data-tone={toast.tone}
+        >
+          <span className="toast-mark" aria-hidden="true">
+            {toast.tone === "success" ? (
+              <Check size={17} />
+            ) : toast.tone === "error" ? (
+              <CircleAlert size={17} />
+            ) : (
+              <BrandSpark />
+            )}
+          </span>
+          <span role={toast.tone === "error" ? "alert" : "status"}>
+            {toast.text}
+          </span>
+          <button
+            aria-label="Закрыть уведомление"
+            onClick={() => setToast(null)}
+          >
+            <X size={15} />
+          </button>
+          <span className="toast-lifetime" aria-hidden="true" />
         </div>
       )}
     </ToastContext.Provider>

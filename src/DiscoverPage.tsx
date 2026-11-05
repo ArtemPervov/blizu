@@ -375,11 +375,7 @@ export function DiscoverPage({
           <h1 id="discover-title">
             Всё нужное. <span>Совсем рядом.</span>
           </h1>
-          <p>
-            Хорошие мастера, полезные находки и помощь в повседневных делах.
-            <br className="hero-copy-break" /> Чуть меньше хлопот — чуть больше
-            Черногории.
-          </p>
+          <p>Местные услуги, товары и хорошие люди в Черногории.</p>
           <form
             className="discovery-search glass-panel"
             role="search"
@@ -471,17 +467,17 @@ export function DiscoverPage({
           </div>
           <div className="discovery-hero-links">
             <button onClick={() => create("request")}>
-              Не знаете, кого искать?{" "}
+              Нужна помощь с задачей?{" "}
               <span>
-                Опишите задачу
+                Создайте заявку
                 <ArrowUpRight size={14} />
               </span>
             </button>
             <span className="hero-link-divider" />
             <Link to="/delivery">
-              Покупка из другой страны?{" "}
+              Покупка издалека?{" "}
               <span>
-                Найдём логиста
+                Закажите доставку
                 <ArrowUpRight size={14} />
               </span>
             </Link>

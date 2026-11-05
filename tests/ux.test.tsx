@@ -110,7 +110,8 @@ beforeEach(() => {
     const method = (init.method || "GET").toLowerCase() as
       | "get"
       | "post"
-      | "put";
+      | "put"
+      | "patch";
     let operation = agent[method](url.pathname + url.search).set(
       "Origin",
       "http://blizu.test",
@@ -453,6 +454,7 @@ test("orders restore filters from a link, search real orders, sort prices and re
   );
   assert.equal(list.getAllByRole("listitem").length, 1);
   assert.ok(list.getByRole("heading", { name: "Посылка из Европы в Будву" }));
+  assert.ok(list.getByRole("img", { name: "Доставка: В пути. Этап 3 из 5." }));
   const phases = within(
     screen.getByRole("group", { name: "Состояние заказов" }),
   );
@@ -482,6 +484,11 @@ test("orders restore filters from a link, search real orders, sort prices and re
   );
   fireEvent.click(phases.getByRole("button", { name: /^Споры/ }));
   assert.ok(
+    !within(screen.getByRole("list", { name: "Список заказов" })).queryByRole(
+      "img",
+    ),
+  );
+  assert.ok(
     within(screen.getByRole("list", { name: "Список заказов" })).getByRole(
       "heading",
       { name: "Ремонт техники" },
@@ -500,6 +507,105 @@ test("orders restore filters from a link, search real orders, sort prices and re
     1,
   );
   assert.ok(screen.getByRole("heading", { name: "Уборка квартиры" }));
+  assert.ok(
+    screen.getByRole("img", { name: "Услуга: Завершён. Этап 3 из 3." }),
+  );
+});
+
+test("delivery progress follows receipt confirmation and never gives the customer provider actions", async () => {
+  await agent.post("/api/auth/demo").send({ role: "customer" }).expect(200);
+  fixture.store.run("UPDATE orders SET status='arrived' WHERE id='order-demo'");
+  fixture.store.event(
+    "order-demo",
+    "arrived",
+    "Посылка прибыла в пункт выдачи.",
+  );
+  mount("/orders/order-demo");
+  let stages = await screen.findByRole("list", { name: "Этапы заказа" });
+  assert.equal(within(stages).getAllByRole("listitem").length, 5);
+  assert.ok(
+    stages
+      .querySelector('[aria-current="step"]')
+      ?.textContent?.includes("Прибыло"),
+  );
+  assert.ok(!screen.queryByRole("button", { name: "Посылка отправлена" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Подтвердить получение" }),
+  );
+  await waitFor(() => {
+    if (
+      !screen
+        .getByRole("list", { name: "Этапы заказа" })
+        .querySelector('[aria-current="step"]')
+        ?.textContent?.includes("Получено")
+    )
+      throw new Error(
+        "Receipt confirmation is not reflected in the progress yet",
+      );
+  });
+  stages = screen.getByRole("list", { name: "Этапы заказа" });
+  assert.ok(
+    stages
+      .querySelector('[aria-current="step"]')
+      ?.textContent?.includes("Получено"),
+  );
+  const response = await agent.get("/api/orders/order-demo").expect(200);
+  assert.equal(response.body.order.status, "completed");
+});
+
+test("workspace next steps come from real offers and a delivery awaiting the customer's confirmation", async () => {
+  await agent.post("/api/auth/demo").send({ role: "customer" }).expect(200);
+  fixture.store.run("UPDATE orders SET status='arrived' WHERE id='order-demo'");
+  mount("/dashboard");
+  const attention = within(
+    await screen.findByRole("region", { name: "С чего продолжить" }),
+  );
+  const confirm = attention.getByRole("link", {
+    name: /Подтвердить получение/,
+  });
+  assert.equal(confirm.getAttribute("href"), "/orders/order-demo");
+  assert.ok(attention.getByRole("link", { name: /Сравнить 1 отклик/ }));
+  assert.ok(!attention.queryByText("Посылка отправлена"));
+  fireEvent.click(confirm);
+  assert.ok(
+    await screen.findByRole("button", { name: "Подтвердить получение" }),
+  );
+});
+
+test("delivery answers expose their expanded state and closing a save notification keeps the favorite", async () => {
+  mount("/delivery");
+  const question = screen.getByRole("button", {
+    name: "Как узнать стоимость?",
+  });
+  const content = document.getElementById(
+    question.getAttribute("aria-controls")!,
+  )!;
+  assert.equal(question.getAttribute("aria-expanded"), "false");
+  assert.equal(content.getAttribute("aria-hidden"), "true");
+  assert.ok(content.hasAttribute("inert"));
+  fireEvent.click(question);
+  assert.equal(question.getAttribute("aria-expanded"), "true");
+  assert.equal(content.getAttribute("aria-hidden"), "false");
+  assert.ok(!content.hasAttribute("inert"));
+  fireEvent.click(question);
+  assert.equal(content.getAttribute("aria-hidden"), "true");
+  fireEvent.click(
+    within(
+      screen.getByRole("navigation", { name: "Основная навигация" }),
+    ).getByRole("link", { name: "Услуги и товары" }),
+  );
+  const items = await cards();
+  fireEvent.click(
+    within(items[0]).getByRole("button", { name: "В избранное" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Закрыть уведомление" }));
+  assert.ok(!screen.queryByRole("button", { name: "Закрыть уведомление" }));
+  assert.equal(
+    within(items[0])
+      .getByRole("button", { name: "Убрать из избранного" })
+      .getAttribute("aria-pressed"),
+    "true",
+  );
 });
 
 test("personal workspace links to the order list and preserves provider-only listings", async () => {

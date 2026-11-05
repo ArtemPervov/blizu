@@ -45,6 +45,9 @@ import {
 } from "./components/ui";
 import type { CreateAction } from "./App";
 import { useMarket } from "./market-state";
+import { OrderProgress } from "./components/OrderProgress";
+import { BrandIllustration } from "./components/BrandIllustration";
+import { getOrderAction } from "./order-state";
 
 function LoginRequired({ onLogin }: { onLogin: () => void }) {
   return (
@@ -656,24 +659,7 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
     );
   const { order, events, messages, incident } = data;
   const owner = order.customerId === user.id;
-  const provider = order.providerId === user.id;
-  const next: Partial<
-    Record<OrderStatus, { status: OrderStatus; label: string }>
-  > =
-    order.kind === "delivery"
-      ? {
-          confirmed: { status: "in_progress", label: "Принять в работу" },
-          in_progress: { status: "in_transit", label: "Посылка отправлена" },
-          in_transit: { status: "arrived", label: "Прибыло в пункт выдачи" },
-          arrived: { status: "completed", label: "Подтвердить получение" },
-        }
-      : {
-          confirmed: { status: "in_progress", label: "Начать работу" },
-          in_progress: { status: "completed", label: "Подтвердить выполнение" },
-        };
-  const action = next[order.status];
-  const canUpdate =
-    action && (action.status === "completed" ? owner : provider);
+  const action = getOrderAction(order, user.id);
   return (
     <div className="page-shell">
       <Link className="back-link" to="/orders">
@@ -709,6 +695,7 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
                 <Truck size={23} className="muted" />
               )}
             </div>
+            <OrderProgress order={order} />
             <div className="timeline">
               {events.map((event, i) => (
                 <div
@@ -726,7 +713,7 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
                 </div>
               ))}
             </div>
-            {canUpdate && (
+            {action && (
               <button
                 className="button primary"
                 disabled={status.isPending}
@@ -811,7 +798,7 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
                 ))
               ) : (
                 <div className="conversation-empty">
-                  <MessageCircle size={28} />
+                  <BrandIllustration kind="conversation" />
                   <p>Поздоровайтесь и уточните детали.</p>
                 </div>
               )}

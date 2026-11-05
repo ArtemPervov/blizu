@@ -11,7 +11,6 @@ import {
   X,
   LoaderCircle,
   CircleAlert,
-  SearchX,
   ArrowUpRight,
   MapPin,
   Star,
@@ -22,10 +21,11 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Listing } from "../../shared/types";
+import { CATEGORIES, type Listing } from "../../shared/types";
 import { api, json, euro, useAuth, useI18n, useToast } from "../lib";
 const ParticleScene = lazy(() => import("./Particles"));
 import { useMarket } from "../market-state";
+import { BrandIllustration, type IllustrationKind } from "./BrandIllustration";
 
 export function Brand() {
   return (
@@ -74,16 +74,16 @@ export function Empty({
   title,
   description,
   children,
+  illustration = "search",
 }: {
   title: string;
   description?: string;
   children?: ReactNode;
+  illustration?: IllustrationKind;
 }) {
   return (
     <div className="state-message empty">
-      <div className="empty-icon">
-        <SearchX size={28} />
-      </div>
+      <BrandIllustration kind={illustration} />
       <h3>{title}</h3>
       {description && <p>{description}</p>}
       {children}
@@ -174,13 +174,17 @@ export function ListingCard({
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["favorites"] });
-      toast(saved ? "Убрали из избранного" : "Сохранили в избранное");
+      toast(
+        saved ? "Убрали из избранного" : "Сохранили в избранное",
+        "success",
+      );
     },
-    onError: (e) => toast(e.message),
+    onError: (e) => toast(e.message, "error"),
   });
   return (
     <article
       className={`listing-card${immersive ? " listing-card--immersive" : ""}`}
+      data-category={listing.category}
       onFocusCapture={() => {
         if (immersive) setPhotoActive(true);
       }}
@@ -212,18 +216,21 @@ export function ListingCard({
           </Suspense>
         )}
         <span className="image-tag">
-          {listing.tags[0] || "Местное предложение"}
+          {CATEGORIES.find((category) => category.id === listing.category)
+            ?.name || "Местное предложение"}
         </span>
         <button
           className={`save-button ${saved ? "saved" : ""}`}
           aria-label={saved ? "Убрать из избранного" : "В избранное"}
           aria-pressed={saved}
+          aria-busy={mutation.isPending}
           disabled={mutation.isPending}
           onClick={() => {
             if (!user) {
               market.toggleSaved(listing);
               toast(
                 saved ? "Убрали из избранного" : "Сохранено на этом устройстве",
+                "success",
               );
               return;
             }
@@ -237,25 +244,12 @@ export function ListingCard({
         <div className="listing-location">
           <MapPin size={12} />
           {listing.city}
-          <span className="rating">
-            <Star size={12} fill="currentColor" />
-            {listing.providerRating.toFixed(1)}
-            <span>({listing.reviewCount})</span>
-          </span>
         </div>
-        <Link className="listing-title" to={`/listings/${listing.id}`}>
-          {listing.title}
-        </Link>
-        <p className="listing-excerpt">{listing.description}</p>
-        <div className="provider-line">
-          <span className="mini-avatar">
-            {listing.providerName.slice(0, 1)}
-          </span>
-          {listing.providerName}
-          {listing.providerVerified && (
-            <BadgeCheck size={14} className="green" />
-          )}
-        </div>
+        <h3 className="listing-heading">
+          <Link className="listing-title" to={`/listings/${listing.id}`}>
+            {listing.title}
+          </Link>
+        </h3>
         <div className="listing-bottom">
           <div>
             <span className="muted small">{t.from} </span>
@@ -269,6 +263,28 @@ export function ListingCard({
           >
             <ArrowUpRight size={19} />
           </Link>
+        </div>
+        <p className="listing-excerpt">{listing.description}</p>
+        <div className="provider-line">
+          <span className="mini-avatar">
+            {listing.providerName.slice(0, 1)}
+          </span>
+          <span className="listing-provider-name">{listing.providerName}</span>
+          {listing.providerVerified && (
+            <BadgeCheck
+              size={14}
+              className="green"
+              aria-label="Профиль с отметкой"
+            />
+          )}
+          <span
+            className="listing-provider-rating"
+            aria-label={`Рейтинг ${listing.providerRating.toFixed(1)}, отзывов: ${listing.reviewCount}`}
+          >
+            <Star size={12} fill="currentColor" />
+            {listing.providerRating.toFixed(1)}
+            <span>({listing.reviewCount})</span>
+          </span>
         </div>
       </div>
       {onCompare && (

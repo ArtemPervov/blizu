@@ -34,6 +34,9 @@ import { api, date, euro, plural, useAuth } from "./lib";
 import { Empty, ErrorState, ListingCard, Loading } from "./components/ui";
 import { RequestCard } from "./pages";
 import type { CreateAction } from "./App";
+import { OrderProgress } from "./components/OrderProgress";
+import { getOrderAction } from "./order-state";
+import { BrandSpark } from "./components/BrandIllustration";
 
 type WorkspaceData = {
   orders: Order[];
@@ -166,6 +169,7 @@ function WorkspaceFrame({
   );
 }
 function OrderRow({ order, user }: { order: Order; user: User }) {
+  const action = getOrderAction(order, user.id);
   const person =
     user.role === "arbiter"
       ? `${order.customerName} · ${order.providerName}`
@@ -192,11 +196,18 @@ function OrderRow({ order, user }: { order: Order; user: User }) {
           </span>
           <h3>{order.title}</h3>
           <span className="order-row-person">{person}</span>
+          {action?.status === "completed" && (
+            <span className="order-row-next">
+              {action.label}
+              <ArrowRight size={12} />
+            </span>
+          )}
         </div>
         <div className="workspace-order-state">
           <span className={`status-pill status-${order.status}`}>
             {STATUS_LABELS[order.status]}
           </span>
+          <OrderProgress order={order} compact />
           <small>
             Обновлён{" "}
             <time dateTime={order.updatedAt}>{date(order.updatedAt)}</time>
@@ -209,6 +220,83 @@ function OrderRow({ order, user }: { order: Order; user: User }) {
         <ArrowUpRight className="order-open-arrow" size={18} />
       </Link>
     </li>
+  );
+}
+function WorkspaceAttention({
+  data,
+  user,
+}: {
+  data: WorkspaceData;
+  user: User;
+}) {
+  const items = [
+    ...data.orders.flatMap((order) => {
+      const action = getOrderAction(order, user.id);
+      if (
+        !action ||
+        (order.status !== "confirmed" && action.status !== "completed")
+      )
+        return [];
+      return [
+        {
+          id: `order-${order.id}`,
+          href: `/orders/${order.id}`,
+          title: action.label,
+          description: order.title,
+          icon: Package,
+        },
+      ];
+    }),
+    ...data.requests
+      .filter((item) => item.status === "open" && item.offerCount > 0)
+      .map((item) => ({
+        id: `request-${item.id}`,
+        href: `/requests/${item.id}`,
+        title: `Сравнить ${item.offerCount} ${plural(item.offerCount, ["отклик", "отклика", "откликов"])}`,
+        description: item.title,
+        icon: MessageCircle,
+      })),
+    ...(user.role === "arbiter"
+      ? data.incidents
+          .filter((item) => item.status === "open")
+          .map((item) => ({
+            id: `incident-${item.id}`,
+            href: `/orders/${item.orderId}`,
+            title: "Рассмотреть спор",
+            description: item.title,
+            icon: ShieldCheck,
+          }))
+      : []),
+  ];
+  if (!items.length) return null;
+  return (
+    <section className="workspace-attention" aria-labelledby="attention-title">
+      <div className="attention-heading">
+        <span className="attention-spark" aria-hidden="true">
+          <BrandSpark />
+        </span>
+        <h2 id="attention-title">С чего продолжить</h2>
+        <span>Ближайшие действия</span>
+      </div>
+      <ul>
+        {items
+          .slice(0, 3)
+          .map(({ id, href, title, description, icon: Icon }) => (
+            <li key={id}>
+              <Link to={href}>
+                <span className="attention-item-icon">
+                  <Icon size={18} />
+                </span>
+                <div>
+                  <strong>{title}</strong>
+                  <p>{description}</p>
+                </div>
+                <ArrowRight size={17} />
+              </Link>
+            </li>
+          ))}
+      </ul>
+    </section>
   );
 }
 function OrderRows({ orders, user }: { orders: Order[]; user: User }) {
@@ -381,6 +469,7 @@ export function DashboardPage({
               </small>
             </Link>
           </div>
+          <WorkspaceAttention data={data} user={user} />
           <section className="workspace-recent">
             <div className="refined-section-heading">
               <div>
@@ -399,6 +488,7 @@ export function DashboardPage({
               />
             ) : (
               <Empty
+                illustration="orders"
                 title="Начнём с хорошего дела?"
                 description="Создайте заявку и выберите подходящий отклик. Здесь появится ваш первый заказ."
               >
@@ -436,7 +526,11 @@ export function DashboardPage({
           </div>
         </>
       ) : tab === "requests" ? (
-        <section className="workspace-collection" aria-label="Мои заявки">
+        <section
+          key={tab}
+          className="workspace-collection"
+          aria-label="Мои заявки"
+        >
           <div className="collection-heading">
             <h2>Ваши задачи</h2>
             <p>
@@ -451,6 +545,7 @@ export function DashboardPage({
             </div>
           ) : (
             <Empty
+              illustration="conversation"
               title="Пока без забот"
               description="Нужна помощь? Расскажите о задаче — исполнители предложат свои условия."
             >
@@ -464,7 +559,11 @@ export function DashboardPage({
           )}
         </section>
       ) : tab === "listings" ? (
-        <section className="workspace-collection" aria-label="Мои предложения">
+        <section
+          key={tab}
+          className="workspace-collection"
+          aria-label="Мои предложения"
+        >
           <div className="collection-heading">
             <h2>Ваши предложения</h2>
             <p>Услуги и товары, которые люди могут найти в каталоге.</p>
@@ -487,7 +586,7 @@ export function DashboardPage({
           )}
         </section>
       ) : (
-        <section className="workspace-collection" aria-label="Споры">
+        <section key={tab} className="workspace-collection" aria-label="Споры">
           <div className="collection-heading">
             <h2>Помогаем найти решение</h2>
             <p>
@@ -520,7 +619,11 @@ export function DashboardPage({
               ))}
             </ul>
           ) : (
-            <Empty title="Всё спокойно" description="Открытых споров нет." />
+            <Empty
+              title="Всё спокойно"
+              description="Открытых споров нет."
+              illustration="conversation"
+            />
           )}
         </section>
       )}
@@ -741,6 +844,7 @@ export function OrdersPage({
           ) : (
             <Empty
               title="Здесь начнутся хорошие дела"
+              illustration="orders"
               description="Выберите отклик на свою заявку — заказ появится здесь вместе с перепиской и историей статусов."
             >
               <button

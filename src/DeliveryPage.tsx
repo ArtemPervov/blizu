@@ -4,7 +4,6 @@ import {
   ArrowRight,
   ArrowUpRight,
   Check,
-  ChevronDown,
   Handshake,
   Link2,
   Package,
@@ -12,6 +11,8 @@ import {
   Truck,
 } from "lucide-react";
 import type { CreateAction } from "./App";
+import { Accordion } from "./components/Accordion";
+import { BrandIllustration } from "./components/BrandIllustration";
 
 const ParticleScene = lazy(() => import("./components/Particles"));
 
@@ -221,17 +222,13 @@ export function DeliveryPage({ create }: { create: CreateAction }) {
             <em>с ясности.</em>
           </h2>
           <p>Чтобы вы чувствовали себя спокойно на каждом этапе.</p>
-          <ShieldCheck size={33} strokeWidth={1.2} />
+          <BrandIllustration kind="route" />
         </div>
         <div className="answer-list">
           {answers.map(([question, answer]) => (
-            <details key={question}>
-              <summary>
-                {question}
-                <ChevronDown size={17} />
-              </summary>
+            <Accordion key={question} title={question}>
               <p>{answer}</p>
-            </details>
+            </Accordion>
           ))}
         </div>
       </section>
