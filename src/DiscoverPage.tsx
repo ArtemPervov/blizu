@@ -7,14 +7,11 @@ import {
   BadgeCheck,
   BriefcaseBusiness,
   CarFront,
-  Check,
   ChefHat,
   ChevronLeft,
   ChevronRight,
   Clock3,
   Grid2X2,
-  Heart,
-  House,
   LayoutGrid,
   List,
   MapPin,
@@ -38,7 +35,6 @@ import {
 import { api, euro, plural } from "./lib";
 import { useMarket } from "./market-state";
 import { Empty, ErrorState, ListingCard, Modal } from "./components/ui";
-import { HeroCarousel } from "./components/HeroCarousel";
 import type { CreateAction } from "./App";
 
 const icons = {
@@ -374,18 +370,12 @@ export function DiscoverPage({
         <div className="discover-intro">
           <div className="discovery-eyebrow">
             <span />
-            ВАША ПОВСЕДНЕВНАЯ ЧЕРНОГОРИЯ
+            ДЛЯ ЖИЗНИ В ЧЕРНОГОРИИ
           </div>
           <h1 id="discover-title">
-            Всё нужное.
-            <br />
-            <span>Совсем рядом.</span>
-            <i aria-hidden="true">✳</i>
+            Всё нужное. <span>Совсем рядом.</span>
           </h1>
-          <p>
-            Хорошие мастера, домашняя еда и полезные находки.
-            <br className="desktop-break" /> Освободите время для жизни у моря.
-          </p>
+          <p>Местные услуги, хорошие мастера и полезные находки.</p>
           <form
             className="discovery-search"
             role="search"
@@ -437,7 +427,8 @@ export function DiscoverPage({
               type="submit"
               aria-label="Найти предложения"
             >
-              <ArrowRight size={22} />
+              Найти
+              <ArrowRight size={18} />
             </button>
           </form>
           <div className="discovery-suggestions">
@@ -475,12 +466,6 @@ export function DiscoverPage({
             )}
           </div>
         </div>
-        <div className="discovery-art">
-          <HeroCarousel />
-          <span className="art-caption">
-            <span>42°25′ N · 18°46′ E</span>Своё место. Свои люди.
-          </span>
-        </div>
       </section>
       <nav className="discovery-categories" aria-label="Категории предложений">
         {CATEGORIES.map((item) => {
@@ -512,7 +497,6 @@ export function DiscoverPage({
                 : category !== "all"
                   ? CATEGORIES.find((item) => item.id === category)?.name
                   : "Найдите своего человека"}
-              <span className="discovery-title-dot">.</span>
             </h2>
             <p aria-live="polite">
               {isFetching
@@ -681,18 +665,9 @@ export function DiscoverPage({
         </div>
       </section>
       <section className="discovery-request-banner">
-        <div className="request-banner-art" aria-hidden="true">
-          <MessageCircle size={42} />
-          <span>✳</span>
-        </div>
         <div>
-          <span className="section-kicker">ЕСТЬ ЗАДАЧА — НАЙДУТСЯ ЛЮДИ</span>
-          <h2>
-            Пусть хорошие предложения
-            <br />
-            найдут вас.
-          </h2>
-          <p>Одна заявка. Разные отклики. Ваш выбор.</p>
+          <h2>Нужна помощь с вашей задачей?</h2>
+          <p>Расскажите о ней. Исполнители предложат свои условия.</p>
         </div>
         <button className="button primary" onClick={() => create("request")}>
           Рассказать о задаче
