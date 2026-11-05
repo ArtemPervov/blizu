@@ -3,6 +3,7 @@ import {
   Suspense,
   useEffect,
   useRef,
+  useId,
   useState,
   type ReactNode,
 } from "react";
@@ -16,12 +17,15 @@ import {
   Star,
   Heart,
   BadgeCheck,
+  Columns3,
+  Check,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Listing } from "../../shared/types";
 import { api, json, euro, useAuth, useI18n, useToast } from "../lib";
 const ParticleScene = lazy(() => import("./Particles"));
+import { useMarket } from "../market-state";
 
 export function Brand() {
   return (
@@ -95,6 +99,7 @@ export function Modal({
   children: ReactNode;
   onClose: () => void;
 }) {
+  const titleId = useId();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
@@ -110,6 +115,7 @@ export function Modal({
     <dialog
       className="modal"
       ref={ref}
+      aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
@@ -120,7 +126,7 @@ export function Modal({
     >
       <div className="modal-inner">
         <div className="modal-head">
-          <h2>{title}</h2>
+          <h2 id={titleId}>{title}</h2>
           <button
             className="icon-button"
             aria-label="Закрыть"
@@ -137,10 +143,15 @@ export function Modal({
 export function ListingCard({
   listing,
   immersive = false,
+  onCompare,
+  compared = false,
 }: {
   listing: Listing;
   immersive?: boolean;
+  onCompare?: () => void;
+  compared?: boolean;
 }) {
+  const market = useMarket();
   const [photoActive, setPhotoActive] = useState(false);
   const image = listing.image || "/images/home.jpg";
   const { user } = useAuth();
@@ -152,7 +163,9 @@ export function ListingCard({
     queryFn: () => api<{ ids: string[] }>("/favorites"),
     enabled: !!user,
   });
-  const saved = data?.ids.includes(listing.id) ?? false;
+  const saved = user
+    ? (data?.ids.includes(listing.id) ?? false)
+    : market.saved.some((item) => item.id === listing.id);
   const mutation = useMutation({
     mutationFn: () =>
       api(`/favorites/${listing.id}`, {
@@ -208,7 +221,10 @@ export function ListingCard({
           disabled={mutation.isPending}
           onClick={() => {
             if (!user) {
-              toast("Войдите, чтобы сохранять предложения");
+              market.toggleSaved(listing);
+              toast(
+                saved ? "Убрали из избранного" : "Сохранено на этом устройстве",
+              );
               return;
             }
             mutation.mutate();
@@ -230,6 +246,7 @@ export function ListingCard({
         <Link className="listing-title" to={`/listings/${listing.id}`}>
           {listing.title}
         </Link>
+        <p className="listing-excerpt">{listing.description}</p>
         <div className="provider-line">
           <span className="mini-avatar">
             {listing.providerName.slice(0, 1)}
@@ -254,6 +271,17 @@ export function ListingCard({
           </Link>
         </div>
       </div>
+      {onCompare && (
+        <button
+          className={`compare-choice ${compared ? "is-selected" : ""}`}
+          aria-pressed={compared}
+          onClick={onCompare}
+          aria-label={`${compared ? "Убрать из сравнения" : "Сравнить"}: ${listing.title}`}
+        >
+          {compared ? <Check size={15} /> : <Columns3 size={15} />}{" "}
+          {compared ? "В сравнении" : "Сравнить"}
+        </button>
+      )}
     </article>
   );
 }

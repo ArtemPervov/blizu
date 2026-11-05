@@ -365,9 +365,23 @@ export function createApp(options: AppOptions = {}) {
         q: z.string().max(200).optional(),
         category: z.string().max(40).optional(),
         city: z.string().max(80).optional(),
-        sort: z.enum(["recommended", "newest", "price"]).default("recommended"),
+        sort: z
+          .enum(["recommended", "newest", "price", "price_desc", "rating"])
+          .default("recommended"),
+        minPrice: z.coerce.number().min(0).max(1000000).optional(),
+        maxPrice: z.coerce.number().min(0).max(1000000).optional(),
+        minRating: z.coerce.number().min(0).max(5).optional(),
+        verified: z.enum(["1"]).optional(),
         limit: z.coerce.number().int().min(1).max(100).default(60),
+        offset: z.coerce.number().int().min(0).max(100000).default(0),
       })
+      .refine(
+        (value) =>
+          value.minPrice === undefined ||
+          value.maxPrice === undefined ||
+          value.minPrice <= value.maxPrice,
+        { message: "Минимальная цена не должна быть выше максимальной" },
+      )
       .parse(req.query);
     const where = ["1=1"];
     const params: (string | number)[] = [];
@@ -385,16 +399,42 @@ export function createApp(options: AppOptions = {}) {
       );
       params.push(input.q.toLocaleLowerCase("ru"));
     }
+    if (input.minPrice !== undefined) {
+      where.push("l.price>=?");
+      params.push(input.minPrice);
+    }
+    if (input.maxPrice !== undefined) {
+      where.push("l.price<=?");
+      params.push(input.maxPrice);
+    }
+    if (input.minRating !== undefined) {
+      where.push("u.rating>=?");
+      params.push(input.minRating);
+    }
+    if (input.verified) where.push("u.verified=1");
+    const total =
+      store.get<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM listings l JOIN users u ON u.id=l.providerId WHERE ${where.join(" AND ")}`,
+        ...params,
+      )?.count ?? 0;
+    const ordering =
+      input.sort === "price"
+        ? "l.price ASC,l.id ASC"
+        : input.sort === "price_desc"
+          ? "l.price DESC,l.id ASC"
+          : input.sort === "newest"
+            ? "l.createdAt DESC,l.id ASC"
+            : "u.rating DESC,l.reviewCount DESC,l.id ASC";
     let items: Record<string, unknown>[] = store
       .all<
         Record<string, unknown>
-      >(`${listingsSelect} WHERE ${where.join(" AND ")} ORDER BY ${input.sort === "price" ? "l.price ASC" : input.sort === "newest" ? "l.createdAt DESC" : "u.rating DESC,l.reviewCount DESC"} LIMIT ?`, ...params, input.limit)
+      >(`${listingsSelect} WHERE ${where.join(" AND ")} ORDER BY ${ordering} LIMIT ? OFFSET ?`, ...params, input.limit, input.offset)
       .map((l) => ({
         ...l,
         tags: JSON.parse(String(l.tags)),
         providerVerified: Boolean(l.providerVerified),
       }));
-    res.json({ items });
+    res.json({ items, total });
   });
   app.get("/api/listings/:id", (req, res) => {
     const item = store.get<Record<string, unknown>>(
@@ -955,21 +995,17 @@ export function createApp(options: AppOptions = {}) {
   app.use(
     (error: unknown, _req: Request, res: Response, _next: NextFunction) => {
       if (error instanceof z.ZodError) {
-        res
-          .status(400)
-          .json({
-            error: error.issues
-              .map((i) => `${i.path.join(".")}: ${i.message}`)
-              .join("; "),
-          });
+        res.status(400).json({
+          error: error.issues
+            .map((i) => `${i.path.join(".")}: ${i.message}`)
+            .join("; "),
+        });
         return;
       }
       if (error instanceof multer.MulterError) {
-        res
-          .status(400)
-          .json({
-            error: "Не удалось загрузить фото. Максимальный размер — 5 МБ.",
-          });
+        res.status(400).json({
+          error: "Не удалось загрузить фото. Максимальный размер — 5 МБ.",
+        });
         return;
       }
       if (error instanceof HttpError) {

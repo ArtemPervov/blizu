@@ -7,6 +7,72 @@ import { join } from "node:path";
 import { createApp } from "./app.js";
 import { Store } from "./db.js";
 
+test("catalog filters are applied before pagination and include a stable total", async () => {
+  const f = fixture();
+  try {
+    const all = (await request(f.app).get("/api/listings").expect(200)).body;
+    assert.equal(all.total, all.items.length);
+    const cheap = (
+      await request(f.app)
+        .get("/api/listings?maxPrice=20&sort=price")
+        .expect(200)
+    ).body;
+    assert.ok(cheap.items.length > 0);
+    assert.ok(cheap.items.every((item: { price: number }) => item.price <= 20));
+    assert.deepEqual(
+      cheap.items.map((item: { price: number }) => item.price),
+      cheap.items
+        .map((item: { price: number }) => item.price)
+        .sort((a: number, b: number) => a - b),
+    );
+    const trusted = (
+      await request(f.app)
+        .get("/api/listings?minRating=4.9&verified=1&minPrice=10")
+        .expect(200)
+    ).body;
+    assert.ok(
+      trusted.items.every(
+        (item: {
+          price: number;
+          providerRating: number;
+          providerVerified: boolean;
+        }) =>
+          item.price >= 10 &&
+          item.providerRating >= 4.9 &&
+          item.providerVerified,
+      ),
+    );
+    const first = (
+      await request(f.app)
+        .get("/api/listings?limit=2&sort=price_desc")
+        .expect(200)
+    ).body;
+    const next = (
+      await request(f.app)
+        .get("/api/listings?limit=2&offset=2&sort=price_desc")
+        .expect(200)
+    ).body;
+    assert.equal(first.items.length, 2);
+    assert.equal(next.items.length, 2);
+    assert.equal(first.total, all.total);
+    assert.equal(next.total, all.total);
+    assert.ok(
+      first.items.every(
+        (item: { id: string }) =>
+          !next.items.some((other: { id: string }) => other.id === item.id),
+      ),
+    );
+    assert.ok(first.items[1].price >= next.items[0].price);
+    await request(f.app)
+      .get("/api/listings?minPrice=100&maxPrice=10")
+      .expect(400);
+    await request(f.app).get("/api/listings?minRating=6").expect(400);
+    await request(f.app).get("/api/listings?verified=unknown").expect(400);
+  } finally {
+    f.cleanup();
+  }
+});
+
 function fixture(demo = true) {
   const dir = mkdtempSync(join(tmpdir(), "blizu-test-"));
   const store = new Store(":memory:");

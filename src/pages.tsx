@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -46,6 +46,7 @@ import {
   Modal,
 } from "./components/ui";
 import type { CreateAction } from "./App";
+import { useMarket } from "./market-state";
 const ParticleScene = lazy(() => import("./components/Particles"));
 
 function LoginRequired({ onLogin }: { onLogin: () => void }) {
@@ -153,6 +154,7 @@ export function RequestsPage({
           ].map(([value, label]) => (
             <button
               className={kind === value ? "active" : ""}
+              aria-pressed={kind === value}
               key={value}
               onClick={() => setKind(value)}
             >
@@ -484,10 +486,14 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
 
 export function ListingPage({ create }: { create: CreateAction }) {
   const { id } = useParams();
+  const market = useMarket();
   const { data, isPending, error, refetch } = useQuery({
     queryKey: ["listing", id],
     queryFn: () => api<{ item: Listing }>(`/listings/${id}`),
   });
+  useEffect(() => {
+    if (data?.item) market.remember(data.item);
+  }, [data?.item]);
   if (isPending)
     return (
       <div className="page-shell">
@@ -554,12 +560,13 @@ export function ListingPage({ create }: { create: CreateAction }) {
               className="button primary full"
               onClick={() => create("request", l)}
             >
-              Обсудить задачу
+              Создать заявку
               <ArrowUpRight size={18} />
             </button>
             <p className="muted small">
-              Создадим заявку по этому предложению. Согласуйте итоговую цену в
-              отклике до начала работы.
+              Создадим заявку на площадке по этому предложению. Исполнители
+              смогут прислать отклики — вы сравните условия и выберете
+              подходящего.
             </p>
             <div className="form-note">
               <ShieldCheck size={21} />
@@ -805,6 +812,7 @@ export function DashboardPage({
         {tabs.map(([value, label, count]) => (
           <button
             className={tab === value ? "active" : ""}
+            aria-pressed={tab === value}
             key={String(value)}
             onClick={() => setTab(String(value))}
           >

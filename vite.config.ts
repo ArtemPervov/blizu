@@ -7,10 +7,18 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // Shared React runtime stays separate from the lazily loaded 3D scene.
-        manualChunks: {
-          vendor: ["react", "react-dom", "react-dom/client", "react/jsx-runtime"],
-          three: ["three", "@react-three/fiber"],
+        // Keep React and its shared helpers out of the optional WebGL bundle.
+        onlyExplicitManualChunks: true,
+        manualChunks(id) {
+          const path = id.replaceAll("\\", "/");
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(path))
+            return "vendor";
+          if (
+            /node_modules\/(three|@react-three\/fiber|react-reconciler)\//.test(
+              path,
+            )
+          )
+            return "three";
         },
       },
     },

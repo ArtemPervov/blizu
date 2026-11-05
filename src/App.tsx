@@ -1,11 +1,4 @@
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Link,
   NavLink,
@@ -13,23 +6,13 @@ import {
   Routes,
   useLocation,
   useNavigate,
-  useSearchParams,
 } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowRight,
   ArrowUpRight,
-  BadgeCheck,
   Bell,
-  BriefcaseBusiness,
-  CarFront,
-  Check,
   ChevronDown,
-  ChefHat,
-  CircleCheck,
-  Clock3,
   Globe2,
-  Grid2X2,
   Heart,
   House,
   Leaf,
@@ -37,26 +20,12 @@ import {
   MapPin,
   Menu,
   MessageCircle,
-  Package,
   Plus,
-  Search,
-  ShieldCheck,
-  ShoppingBag,
-  SlidersHorizontal,
-  Sparkles,
-  Star,
-  Truck,
   UserRound,
-  Wrench,
   X,
 } from "lucide-react";
-import {
-  CATEGORIES,
-  CITIES,
-  type Listing,
-  type Notification,
-} from "../shared/types";
-import { api, json, plural, useAuth, useI18n, useToast } from "./lib";
+import { CITIES, type Listing, type Notification } from "../shared/types";
+import { api, json, useAuth, useI18n, useToast } from "./lib";
 import {
   Brand,
   Empty,
@@ -73,19 +42,9 @@ import {
   RequestPage,
   RequestsPage,
 } from "./pages";
-import { ParticleHeading } from "./components/ParticleHeading";
-import { HeroCarousel } from "./components/HeroCarousel";
-const ParticleScene = lazy(() => import("./components/Particles"));
-const categoryIcons: Record<string, typeof House> = {
-  all: Grid2X2,
-  repair: Wrench,
-  food: ChefHat,
-  auto: CarFront,
-  beauty: Sparkles,
-  business: BriefcaseBusiness,
-  goods: ShoppingBag,
-  delivery: Package,
-};
+import { DiscoverPage } from "./DiscoverPage";
+import { CompareTray } from "./components/CompareTray";
+import { useMarket } from "./market-state";
 export type CreateAction = (
   kind: CreateKind,
   preset?: Partial<Listing>,
@@ -106,7 +65,28 @@ export default function App() {
   const [userMenu, setUserMenu] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [city, setCity] = useState("Вся Черногория");
+  const [city, setCityState] = useState("Вся Черногория");
+  const setCity = (value: string) => {
+    setCityState(value);
+    if (location.pathname === "/") {
+      const search = new URLSearchParams(location.search);
+      search.set("city", value);
+      search.delete("page");
+      navigate(
+        { pathname: "/", search: search.toString() },
+        { preventScrollReset: true },
+      );
+    }
+  };
+  useEffect(() => {
+    if (location.pathname !== "/") return;
+    const selected = new URLSearchParams(location.search).get("city");
+    setCityState(
+      selected && CITIES.some((item) => item === selected)
+        ? selected
+        : "Вся Черногория",
+    );
+  }, [location.pathname, location.search]);
   const intent = useRef<(() => void) | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { data: meta } = useQuery({
@@ -147,6 +127,9 @@ export default function App() {
   }, []);
   return (
     <>
+      <a className="skip-link" href="#main-content">
+        Перейти к содержимому
+      </a>
       <header className="site-header">
         <div className="header-inner">
           <Brand />
@@ -154,11 +137,10 @@ export default function App() {
             <NavLink to="/" end>
               {t.services}
             </NavLink>
-            <NavLink to="/requests">{t.requests}</NavLink>
-            <NavLink to="/delivery">
-              {t.delivery}
-              <span className="nav-new">new</span>
+            <NavLink to="/requests">
+              {language === "ru" ? "Заявки" : t.requests}
             </NavLink>
+            <NavLink to="/delivery">{t.delivery}</NavLink>
           </nav>
           <div className="header-actions">
             <label className="city-control">
@@ -189,6 +171,13 @@ export default function App() {
               </select>
             </label>
             <div className="account-controls" ref={menuRef}>
+              <Link
+                className="header-favorites icon-button"
+                to="/favorites"
+                aria-label="Избранное"
+              >
+                <Heart size={20} />
+              </Link>
               {user ? (
                 <>
                   <button
@@ -294,7 +283,7 @@ export default function App() {
               }
             >
               <Plus size={18} />
-              {t.create}
+              {user?.role === "provider" ? "Добавить услугу" : "Создать заявку"}
             </button>
             <button
               className="icon-button mobile-toggle"
@@ -318,12 +307,12 @@ export default function App() {
           </nav>
         )}
       </header>
-      <main>
+      <main id="main-content" tabIndex={-1}>
         <Routes>
           <Route
             path="/"
             element={
-              <Home
+              <DiscoverPage
                 city={city}
                 setCity={setCity}
                 create={createAction}
@@ -387,6 +376,29 @@ export default function App() {
           />
         </Routes>
       </main>
+      <nav className="bottom-navigation" aria-label="Мобильная навигация">
+        <NavLink to="/" end>
+          <House size={20} />
+          <span>Главная</span>
+        </NavLink>
+        <NavLink to="/requests">
+          <MessageCircle size={20} />
+          <span>Заявки</span>
+        </NavLink>
+        <button onClick={() => createAction("request")}>
+          <Plus size={22} />
+          <span>Создать</span>
+        </button>
+        <NavLink to="/favorites">
+          <Heart size={20} />
+          <span>Избранное</span>
+        </NavLink>
+        <NavLink to="/dashboard">
+          <UserRound size={20} />
+          <span>Мои дела</span>
+        </NavLink>
+      </nav>
+      <CompareTray />
       <footer className="site-footer">
         <div className="footer-main">
           <div>
@@ -455,367 +467,35 @@ export default function App() {
   );
 }
 
-function Home({
-  city,
-  setCity,
-  create,
-  meta,
-}: {
-  city: string;
-  setCity: (city: string) => void;
-  create: CreateAction;
-  meta?: {
-    stats: { listings: number; providers: number; requests: number };
-    demo: boolean;
-  };
-}) {
-  const { t, language } = useI18n();
-  const [params, setParams] = useSearchParams();
-  const [search, setSearch] = useState(params.get("q") ?? "");
-  const category = params.get("category") ?? "all";
-  const q = params.get("q") ?? "";
-  const sort = params.get("sort") ?? "recommended";
-  useEffect(() => setSearch(q), [q]);
-  const filters = new URLSearchParams({ q, category, city, sort });
-  const { data, isPending, error, refetch } = useQuery({
-    queryKey: ["listings", q, category, city, sort],
-    queryFn: () => api<{ items: Listing[] }>(`/listings?${filters}`),
-  });
-  const setFilter = (key: string, value: string) =>
-    setParams(
-      (p) => {
-        if (value) p.set(key, value);
-        else p.delete(key);
-        return p;
-      },
-      { preventScrollReset: true },
-    );
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    setFilter("q", search);
-    document
-      .getElementById("catalog")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-  return (
-    <>
-      <section className="hero-section hero-section-large">
-        <div className="hero-copy">
-          <span className="eyebrow">
-            <span className="live-dot" />
-            {t.near}
-          </span>
-          <ParticleHeading first={t.hero1} second={t.hero2} />
-          <p className="hero-description">{t.intro}</p>
-          <div className="hero-social">
-            <div className="avatar-stack">
-              <span>ЕК</span>
-              <span>СМ</span>
-              <span>АВ</span>
-              <span>
-                <Heart size={14} fill="currentColor" />
-              </span>
-            </div>
-            <p>
-              <strong>Место, где помогают свои</strong>
-              <span>Местные люди. Понятные договорённости.</span>
-            </p>
-          </div>
-          <a className="hero-text-link" href="#how-it-works">
-            {t.how}
-            <ArrowUpRight size={17} />
-          </a>
-        </div>
-        <HeroCarousel />
-      </section>
-      <section className="discovery-section" aria-label="Поиск предложений">
-        <form className="search-bar" onSubmit={submit}>
-          <div className="search-input">
-            <Search size={21} />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t.search}
-              aria-label={t.search}
-            />
-            {search && (
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Очистить поиск"
-                onClick={() => {
-                  setSearch("");
-                  setFilter("q", "");
-                }}
-              >
-                <X size={16} />
-              </button>
-            )}
-          </div>
-          <label className="search-city">
-            <MapPin size={18} />
-            <select
-              aria-label="Город поиска"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-            >
-              {CITIES.map((c) => (
-                <option key={c} value={c}>
-                  {c === "Вся Черногория" ? t.everywhere : c}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={16} />
-          </label>
-          <button className="button primary search-submit" type="submit">
-            {t.find}
-            <ArrowRight size={18} />
-          </button>
-        </form>
-        <div className="suggestions">
-          <span>Например:</span>
-          {["Кондиционер", "Домашняя еда", "Бухгалтер", "Доставка из РФ"].map(
-            (term, i) => (
-              <button
-                key={term}
-                onClick={() => {
-                  if (i === 3) {
-                    create("delivery");
-                    return;
-                  }
-                  setSearch(term);
-                  setFilter("q", term);
-                }}
-              >
-                {term}
-              </button>
-            ),
-          )}
-        </div>
-      </section>
-      <section className="category-section" aria-label="Категории">
-        {CATEGORIES.map((c) => {
-          const Icon = categoryIcons[c.id];
-          return (
-            <button
-              key={c.id}
-              className={`category-tile cat-${c.id} ${category === c.id ? "selected" : ""}`}
-              onClick={() => {
-                setFilter("category", c.id);
-                document
-                  .getElementById("catalog")
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-              aria-pressed={category === c.id}
-            >
-              <span className="category-icon">
-                <Icon size={25} strokeWidth={1.5} />
-              </span>
-              <span>
-                {language === "en" ? c.en : language === "sr" ? c.sr : c.name}
-              </span>
-            </button>
-          );
-        })}
-      </section>
-      <section className="catalog-section section-space" id="catalog">
-        <div className="section-header">
-          <div>
-            <span className="section-kicker">МЕСТНЫЕ. БЛИЗКИЕ. ВАШИ.</span>
-            <h2>
-              {q || category !== "all" ? t.catalog : t.popular}
-              <span className="heading-dot">.</span>
-            </h2>
-          </div>
-          <label className="sort-control">
-            <SlidersHorizontal size={15} />
-            <select
-              aria-label="Сортировка предложений"
-              value={sort}
-              onChange={(e) => setFilter("sort", e.target.value)}
-            >
-              <option value="recommended">Рекомендуем</option>
-              <option value="newest">Сначала новые</option>
-              <option value="price">Сначала дешевле</option>
-            </select>
-            <ChevronDown size={13} />
-          </label>
-        </div>
-        {(q || category !== "all" || city !== "Вся Черногория") && (
-          <div className="active-filters">
-            <span>
-              {data?.items.length ?? 0}{" "}
-              {plural(data?.items.length ?? 0, [
-                "предложение",
-                "предложения",
-                "предложений",
-              ])}
-              {q && ` по запросу «${q}»`}
-            </span>
-            <button
-              onClick={() => {
-                setParams({});
-                setSearch("");
-                setCity("Вся Черногория");
-              }}
-            >
-              {t.reset}
-              <X size={13} />
-            </button>
-          </div>
-        )}
-        {isPending ? (
-          <div className="listing-grid catalog-grid">
-            {[1, 2, 3].map((i) => (
-              <div className="skeleton-card" key={i}>
-                <span />
-                <i />
-                <i />
-                <i />
-              </div>
-            ))}
-          </div>
-        ) : error ? (
-          <ErrorState error={error} retry={refetch} />
-        ) : data?.items.length ? (
-          <div className="listing-grid catalog-grid">
-            {data.items.map((l) => (
-              <ListingCard listing={l} key={l.id} immersive />
-            ))}
-          </div>
-        ) : (
-          <Empty title={t.empty} description={t.emptyHint}>
-            <button
-              className="button secondary"
-              onClick={() => {
-                setParams({});
-                setSearch("");
-                setCity("Вся Черногория");
-              }}
-            >
-              {t.reset}
-            </button>
-          </Empty>
-        )}
-      </section>
-      <section className="request-callout">
-        <div className="callout-doodle">
-          <MessageCircle size={43} strokeWidth={1.25} />
-          <span>✳</span>
-        </div>
-        <div>
-          <span className="section-kicker">ПУСТЬ ВАС НАЙДУТ</span>
-          <h2>Не ищите. Расскажите, что нужно.</h2>
-          <p>Создайте заявку — мастера сами предложат цену и удобное время.</p>
-        </div>
-        <button className="button dark" onClick={() => create("request")}>
-          {t.newRequest}
-          <ArrowUpRight size={18} />
-        </button>
-      </section>
-      <section className="local-life section-space">
-        <div className="local-life-heading">
-          <span className="section-kicker">МЕНЬШЕ ХЛОПОТ. БОЛЬШЕ ЖИЗНИ.</span>
-          <h2>
-            Одна площадка.
-            <br />
-            Тысяча повседневных решений.
-          </h2>
-          <p>
-            Чтобы в новой стране было чуть уютнее.
-            <br />И всё важное находилось рядом.
-          </p>
-        </div>
-        <Link className="feature-card delivery-feature" to="/delivery">
-          <span className="feature-icon">
-            <Package size={27} />
-          </span>
-          <span className="feature-overline">ИЗ-ЗА ГРАНИЦЫ — ДО ДВЕРИ</span>
-          <h3>
-            Далеко —<br />
-            тоже близко.
-          </h3>
-          <p>
-            Покупки из РФ, Китая и Европы.
-            <br />
-            Понятная цена. Каждый этап на виду.
-          </p>
-          <span className="feature-link">
-            Как устроена доставка
-            <ArrowUpRight size={18} />
-          </span>
-          <div className="feature-parcel-scene">
-            <Suspense fallback={null}>
-              <ParticleScene variant="delivery" compact />
-            </Suspense>
-          </div>
-        </Link>
-        <div className="feature-card care-feature">
-          <span className="feature-icon">
-            <ShieldCheck size={27} />
-          </span>
-          <span className="feature-overline">ПОМОЖЕМ ДОГОВОРИТЬСЯ</span>
-          <h3>
-            Всё начинается
-            <br />с доверия.
-          </h3>
-          <p>
-            Контакты в заказе, история договорённостей
-            <br />и арбитр, если что-то пошло не так.
-          </p>
-          <a className="feature-link" href="#how-it-works">
-            Узнать больше
-            <ArrowUpRight size={18} />
-          </a>
-          <span className="care-decoration">✳</span>
-        </div>
-      </section>
-      <section id="how-it-works" className="how-section section-space">
-        <div className="section-header">
-          <div>
-            <span className="section-kicker">ПРОСТО, ПО-ЧЕЛОВЕЧЕСКИ</span>
-            <h2>От «мне нужно» до «готово».</h2>
-          </div>
-          <span className="handwritten">
-            Всё получится <span>↗</span>
-          </span>
-        </div>
-        <div className="steps">
-          <div>
-            <span className="step-number">01</span>
-            <h3>Найдите или попросите</h3>
-            <p>Выберите предложение или расскажите о своей задаче.</p>
-          </div>
-          <div>
-            <span className="step-number">02</span>
-            <h3>Договоритесь напрямую</h3>
-            <p>
-              Выберите отклик, согласуйте цену и время. Контакты будут в заказе.
-            </p>
-          </div>
-          <div>
-            <span className="step-number">03</span>
-            <h3>Живите чуть спокойнее</h3>
-            <p>
-              Следите за статусами, подтвердите результат и рассчитайтесь при
-              встрече.
-            </p>
-          </div>
-        </div>
-      </section>
-    </>
-  );
-}
-
 function Favorites({ requireLogin }: { requireLogin: () => void }) {
   const { user, loading } = useAuth();
+  const market = useMarket();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const transfer = useMutation({
+    mutationFn: () =>
+      Promise.all(
+        market.saved.map((item) =>
+          api(`/favorites/${item.id}`, {
+            method: "PUT",
+            body: json({ saved: true }),
+          }),
+        ),
+      ),
+    onSuccess: () => {
+      market.clearSaved();
+      qc.invalidateQueries({ queryKey: ["favorites"] });
+      toast("Избранное перенесено в аккаунт");
+    },
+    onError: (error) => toast(error.message),
+  });
   const { t } = useI18n();
   const ids = useQuery({
     queryKey: ["favorites", user?.id],
     queryFn: () => api<{ ids: string[]; items: Listing[] }>("/favorites"),
     enabled: !!user,
   });
-  const items = ids.data?.items;
+  const items = user ? ids.data?.items : market.saved;
   return (
     <div className="page-shell">
       <div className="page-heading">
@@ -825,20 +505,48 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
           <span className="heading-dot">.</span>
         </h1>
       </div>
+      {user && market.saved.length > 0 && (
+        <div className="guest-saved-note">
+          <Heart size={18} />
+          <p>
+            На этом устройстве есть сохранённые предложения. Перенести их в ваш
+            аккаунт?
+          </p>
+          <button
+            className="button primary"
+            disabled={transfer.isPending}
+            onClick={() => transfer.mutate()}
+          >
+            {transfer.isPending ? "Переносим…" : "Перенести избранное"}
+          </button>
+        </div>
+      )}
+      {!user && !!items?.length && (
+        <div className="guest-saved-note">
+          <Heart size={18} />
+          <p>
+            Избранное сохранено на этом устройстве. Предложения доступны и без
+            регистрации.
+          </p>
+          <button className="button secondary" onClick={requireLogin}>
+            Войти
+          </button>
+        </div>
+      )}
       {loading ? (
         <Loading />
-      ) : !user ? (
+      ) : !user && !items?.length ? (
         <Empty
           title="Сохраните полезные контакты"
-          description="Войдите, чтобы ваши находки всегда были под рукой."
+          description="Нажимайте сердечко на карточках. Ваши находки останутся на этом устройстве."
         >
           <button className="button primary" onClick={requireLogin}>
             Войти в аккаунт
           </button>
         </Empty>
-      ) : ids.isPending ? (
+      ) : user && ids.isPending ? (
         <Loading />
-      ) : ids.error ? (
+      ) : user && ids.error ? (
         <ErrorState error={ids.error} />
       ) : items?.length ? (
         <div className="listing-grid">

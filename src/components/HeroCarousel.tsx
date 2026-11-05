@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 const ParticleScene = lazy(() => import("./Particles"));
+import { supportsWebGL } from "./effects/webgl";
 const SLIDE_DURATION = 7200;
 const TRANSITION_DURATION = 1600;
 const slides = [
@@ -60,9 +61,11 @@ export function HeroCarousel() {
   const [ready, setReady] = useState<number[]>([]);
   const [failed, setFailed] = useState<number[]>([]);
   const [transitioning, setTransitioning] = useState(false);
+  const [webgl, setWebgl] = useState(false);
   const running = playing && inView && pageVisible && ready.length > 1;
 
   useEffect(() => {
+    setWebgl(supportsWebGL());
     const media = matchMedia("(prefers-reduced-motion: reduce)");
     const preference = () => {
       setReduced(media.matches);
@@ -192,7 +195,7 @@ export function HeroCarousel() {
           </div>
         ))}
       </div>
-      {failed.length === 0 && (
+      {failed.length === 0 && webgl && (
         <Suspense fallback={null}>
           <ParticleScene
             imageUrls={imageUrls}

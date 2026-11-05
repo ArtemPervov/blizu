@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
+  Check,
   BriefcaseBusiness,
   Link2,
   Package,
@@ -77,6 +78,7 @@ export function AuthModal({
       <div className="segmented">
         <button
           className={mode === "login" ? "active" : ""}
+          aria-pressed={mode === "login"}
           onClick={() => {
             setMode("login");
             setError("");
@@ -86,6 +88,7 @@ export function AuthModal({
         </button>
         <button
           className={mode === "register" ? "active" : ""}
+          aria-pressed={mode === "register"}
           onClick={() => {
             setMode("register");
             setError("");
@@ -224,8 +227,22 @@ export function CreateModal({
 }) {
   const { user } = useAuth();
   const [kind, setKind] = useState(initialKind);
+  const draftKey = `blizu.draft.${user?.id}.${preset?.id ?? "new"}`;
+  const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>(
+    () => {
+      try {
+        const value = JSON.parse(sessionStorage.getItem(draftKey) || "{}");
+        return value && typeof value === "object" && !Array.isArray(value)
+          ? value
+          : {};
+      } catch {
+        return {};
+      }
+    },
+  );
+  const draft = drafts[kind] || {};
   const [selectedCategory, setSelectedCategory] = useState(
-    preset?.category ?? "repair",
+    drafts[initialKind]?.category ?? preset?.category ?? "repair",
   );
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -252,6 +269,11 @@ export function CreateModal({
       });
     },
     onSuccess: (result) => {
+      try {
+        const next = { ...drafts };
+        delete next[kind];
+        sessionStorage.setItem(draftKey, JSON.stringify(next));
+      } catch {}
       qc.invalidateQueries();
       onClose();
       navigate(
@@ -288,9 +310,14 @@ export function CreateModal({
       </p>
       <div className="create-tabs">
         <button
+          disabled={mutation.isPending}
           className={kind === "request" ? "active" : ""}
+          aria-pressed={kind === "request"}
           onClick={() => {
             setKind("request");
+            setSelectedCategory(
+              drafts.request?.category ?? preset?.category ?? "repair",
+            );
             mutation.reset();
           }}
         >
@@ -298,7 +325,9 @@ export function CreateModal({
           Заявка
         </button>
         <button
+          disabled={mutation.isPending}
           className={kind === "delivery" ? "active" : ""}
+          aria-pressed={kind === "delivery"}
           onClick={() => {
             setKind("delivery");
             mutation.reset();
@@ -309,9 +338,14 @@ export function CreateModal({
         </button>
         {user?.role === "provider" && (
           <button
+            disabled={mutation.isPending}
             className={kind === "listing" ? "active" : ""}
+            aria-pressed={kind === "listing"}
             onClick={() => {
               setKind("listing");
+              setSelectedCategory(
+                drafts.listing?.category ?? preset?.category ?? "repair",
+              );
               mutation.reset();
             }}
           >
@@ -320,7 +354,27 @@ export function CreateModal({
           </button>
         )}
       </div>
-      <form key={kind} className="form-stack" onSubmit={submit}>
+      <form
+        key={kind}
+        className="form-stack"
+        onSubmit={submit}
+        onChange={(event) => {
+          const values = Object.fromEntries(
+            new FormData(event.currentTarget),
+          ) as Record<string, string>;
+          const next = { ...drafts, [kind]: values };
+          setDrafts(next);
+          try {
+            sessionStorage.setItem(draftKey, JSON.stringify(next));
+          } catch {}
+        }}
+      >
+        {drafts[kind] && (
+          <p className="draft-note">
+            <Check size={15} />
+            Черновик сохранён в этой вкладке
+          </p>
+        )}
         <Field
           label={
             kind === "listing" ? "Название предложения" : "Коротко о задаче"
@@ -331,7 +385,7 @@ export function CreateModal({
             required
             minLength={5}
             maxLength={120}
-            defaultValue={preset?.title ? `Нужен мастер: ${preset.title}` : ""}
+            defaultValue={draft.title ?? preset?.title ?? ""}
             placeholder={
               kind === "delivery"
                 ? "Например, доставить кофемашину из Европы"
@@ -346,6 +400,7 @@ export function CreateModal({
                 <Link2 size={17} />
                 <input
                   name="productUrl"
+                  defaultValue={draft.productUrl ?? ""}
                   required
                   type="url"
                   pattern="https?://.*"
@@ -355,7 +410,7 @@ export function CreateModal({
               </div>
             </Field>
             <Field label="Откуда доставить">
-              <select name="origin">
+              <select name="origin" defaultValue={draft.origin ?? "Россия"}>
                 <option>Россия</option>
                 <option>Китай</option>
                 <option>Европа</option>
@@ -373,6 +428,7 @@ export function CreateModal({
         >
           <textarea
             name="description"
+            defaultValue={draft.description ?? ""}
             required
             minLength={kind === "listing" ? 20 : 15}
             maxLength={5000}
@@ -388,6 +444,7 @@ export function CreateModal({
           {kind !== "delivery" && (
             <Field label="Категория">
               <select
+                name="category"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
               >
@@ -402,9 +459,9 @@ export function CreateModal({
           <Field label="Город">
             <select
               name="city"
-              defaultValue={preset?.city ?? user?.city ?? "Будва"}
+              defaultValue={draft.city ?? preset?.city ?? user?.city ?? "Будва"}
             >
-              {CITIES.map((c) => (
+              {CITIES.filter((c) => c !== "Вся Черногория").map((c) => (
                 <option key={c}>{c}</option>
               ))}
             </select>
@@ -425,14 +482,18 @@ export function CreateModal({
               min={kind === "listing" ? 1 : 0}
               max={1000000}
               step="0.01"
-              defaultValue={preset?.price ?? ""}
+              defaultValue={
+                draft[kind === "listing" ? "price" : "budget"] ??
+                preset?.price ??
+                ""
+              }
               required={kind === "listing"}
               placeholder="По договорённости"
             />
           </Field>
           {kind === "listing" && (
             <Field label="За что">
-              <select name="unit">
+              <select name="unit" defaultValue={draft.unit ?? "услуга"}>
                 <option value="услуга">За услугу</option>
                 <option value="час">За час</option>
                 <option value="порция">За порцию</option>
