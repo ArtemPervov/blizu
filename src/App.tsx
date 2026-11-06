@@ -22,6 +22,7 @@ import {
   MessageCircle,
   Plus,
   Package,
+  ShieldCheck,
   UserRound,
   X,
 } from "lucide-react";
@@ -47,6 +48,9 @@ import { DiscoverPage } from "./DiscoverPage";
 import { CompareTray } from "./components/CompareTray";
 import { useMarket } from "./market-state";
 import { BrandSpark } from "./components/BrandIllustration";
+import { OperatorPage } from "./OperatorPage";
+import { useAvailableListings } from "./available-listings";
+import { ReportModal, type ReportTarget } from "./components/ReportButton";
 export type CreateAction = (kind: CreateKind, preset?: CreatePreset) => void;
 
 export default function App() {
@@ -57,6 +61,7 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const [authOpen, setAuthOpen] = useState(false);
+  const [report, setReport] = useState<ReportTarget | null>(null);
   const [create, setCreate] = useState<{
     kind: CreateKind;
     preset?: CreatePreset;
@@ -93,7 +98,12 @@ export default function App() {
     queryFn: () =>
       api<{
         demo: boolean;
-        stats: { listings: number; providers: number; requests: number };
+        stats: {
+          listings: number;
+          providers: number;
+          requests: number;
+          imported?: number;
+        };
       }>("/meta"),
   });
   const { data: notifications } = useQuery({
@@ -108,11 +118,18 @@ export default function App() {
       setAuthOpen(true);
     } else setCreate({ kind, preset });
   };
+  const reportAction = (target: ReportTarget) => {
+    if (!user) {
+      intent.current = () => setReport(target);
+      setAuthOpen(true);
+    } else setReport(target);
+  };
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
     setUserMenu(false);
     setMobileOpen(false);
     setNotificationsOpen(false);
+    setReport(null);
   }, [location.pathname]);
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -217,16 +234,24 @@ export default function App() {
                     <div className="dropdown account-dropdown">
                       <strong>{user.name}</strong>
                       <small>
-                        {user.role === "arbiter"
-                          ? "Арбитр"
-                          : user.role === "provider"
-                            ? "Исполнитель"
-                            : "Заказчик"}
+                        {user.isOperator
+                          ? "Оператор"
+                          : user.role === "arbiter"
+                            ? "Арбитр"
+                            : user.role === "provider"
+                              ? "Исполнитель"
+                              : "Заказчик"}
                       </small>
                       <Link to="/dashboard">
                         <UserRound size={16} />
                         Личный кабинет
                       </Link>
+                      {user.isOperator && (
+                        <Link to="/operator">
+                          <ShieldCheck size={16} />
+                          Панель оператора
+                        </Link>
+                      )}
                       <Link to="/orders">
                         <Package size={16} />
                         Мои заказы
@@ -308,6 +333,9 @@ export default function App() {
             <NavLink to="/delivery">{t.delivery}</NavLink>
             <NavLink to="/dashboard">Личный кабинет</NavLink>
             <NavLink to="/orders">Мои заказы</NavLink>
+            {user?.isOperator && (
+              <NavLink to="/operator">Панель оператора</NavLink>
+            )}
             <button onClick={() => createAction("request")}>
               Создать заявку
             </button>
@@ -347,7 +375,9 @@ export default function App() {
           />
           <Route
             path="/listings/:id"
-            element={<ListingPage create={createAction} />}
+            element={
+              <ListingPage create={createAction} report={reportAction} />
+            }
           />
           <Route
             path="/dashboard"
@@ -357,6 +387,10 @@ export default function App() {
                 requireLogin={() => setAuthOpen(true)}
               />
             }
+          />
+          <Route
+            path="/operator"
+            element={<OperatorPage requireLogin={() => setAuthOpen(true)} />}
           />
           <Route
             path="/orders"
@@ -472,6 +506,9 @@ export default function App() {
           }}
         />
       )}
+      {report && user && (
+        <ReportModal {...report} onClose={() => setReport(null)} />
+      )}
       {create && (
         <CreateModal
           kind={create.kind}
@@ -491,7 +528,7 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
   const transfer = useMutation({
     mutationFn: () =>
       Promise.all(
-        market.saved.map((item) =>
+        guestSaved.items.map((item) =>
           api(`/favorites/${item.id}`, {
             method: "PUT",
             body: json({ saved: true }),
@@ -511,7 +548,8 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
     queryFn: () => api<{ ids: string[]; items: Listing[] }>("/favorites"),
     enabled: !!user,
   });
-  const items = user ? ids.data?.items : market.saved;
+  const guestSaved = useAvailableListings(market.saved);
+  const items = user ? ids.data?.items : guestSaved.items;
   return (
     <div className="page-shell">
       <div className="page-heading">
@@ -521,7 +559,7 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
           <span className="heading-dot">.</span>
         </h1>
       </div>
-      {user && market.saved.length > 0 && (
+      {user && guestSaved.items.length > 0 && (
         <div className="guest-saved-note">
           <Heart size={18} />
           <p>
@@ -549,8 +587,10 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
           </button>
         </div>
       )}
-      {loading ? (
+      {loading || guestSaved.loading ? (
         <Loading />
+      ) : !user && guestSaved.error ? (
+        <ErrorState error={guestSaved.error} retry={guestSaved.refetch} />
       ) : !user && !items?.length ? (
         <Empty
           title="Сохраните полезные контакты"

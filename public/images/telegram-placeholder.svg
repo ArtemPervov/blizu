@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="750" viewBox="0 0 1000 750">
+  <rect width="1000" height="750" fill="#eeeee7"/>
+  <circle cx="500" cy="330" r="90" fill="#e0eae7"/>
+  <path d="m447 330 110-44-29 95-35-28-22 19 3-37 58-32-49 41z" fill="none" stroke="#6c9293" stroke-linejoin="round" stroke-width="5"/>
+  <text x="500" y="480" text-anchor="middle" font-family="sans-serif" font-size="23" fill="#6d6a64">Фото не приложено</text>
+</svg>

@@ -11,6 +11,7 @@ import {
   CircleAlert,
   Clock3,
   ExternalLink,
+  EyeOff,
   FileImage,
   Handshake,
   MapPin,
@@ -48,6 +49,9 @@ import { useMarket } from "./market-state";
 import { OrderProgress } from "./components/OrderProgress";
 import { BrandIllustration } from "./components/BrandIllustration";
 import { getOrderAction } from "./order-state";
+import { ReportButton, type ReportTarget } from "./components/ReportButton";
+import { ListingGallery } from "./components/ListingGallery";
+import { listingAuthor, listingCity, listingPrice } from "./listing-format";
 
 function LoginRequired({ onLogin }: { onLogin: () => void }) {
   return (
@@ -499,15 +503,23 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
   );
 }
 
-export function ListingPage({ create }: { create: CreateAction }) {
+export function ListingPage({
+  create,
+  report,
+}: {
+  create: CreateAction;
+  report: (target: ReportTarget) => void;
+}) {
   const { id } = useParams();
+  const { user } = useAuth();
   const market = useMarket();
   const { data, isPending, error, refetch } = useQuery({
-    queryKey: ["listing", id],
+    queryKey: ["listing", id, user?.id],
     queryFn: () => api<{ item: Listing }>(`/listings/${id}`),
   });
   useEffect(() => {
-    if (data?.item) market.remember(data.item);
+    if (data?.item && !data.item.hidden && !data.item.ownerBlocked)
+      market.remember(data.item);
   }, [data?.item]);
   if (isPending)
     return (
@@ -530,26 +542,39 @@ export function ListingPage({ create }: { create: CreateAction }) {
       </Link>
       <div className="detail-layout">
         <div>
-          <div className="detail-image">
-            <img src={l.image} alt={l.title} />
-            <span className="image-tag">
-              {CATEGORIES.find((c) => c.id === l.category)?.name}
-            </span>
-          </div>
+          <ListingGallery key={l.id} listing={l} />
           <h1 className="detail-title">{l.title}</h1>
+          {l.hidden && (
+            <p className="listing-moderation-notice">
+              <EyeOff size={17} />
+              Скрыто оператором: {l.moderationReason}
+            </p>
+          )}
+          {l.ownerBlocked && (
+            <p className="listing-moderation-notice">
+              Автор заблокирован. Предложение недоступно в каталоге.
+            </p>
+          )}
           <div className="detail-meta">
             <span>
               <MapPin size={15} />
-              {l.city}
+              {listingCity(l)}
             </span>
-            <span className="rating">
-              <Star size={14} fill="currentColor" />
-              {l.providerRating.toFixed(1)}{" "}
-              <span>· {l.reviewCount} оценок</span>
-            </span>
+            {l.source ? (
+              <span>
+                <Send size={14} />
+                Из Telegram · {date(l.source.postedAt)}
+              </span>
+            ) : (
+              <span className="rating">
+                <Star size={14} fill="currentColor" />
+                {l.providerRating.toFixed(1)}{" "}
+                <span>· {l.reviewCount} оценок</span>
+              </span>
+            )}
           </div>
           <section className="content-card">
-            <h2>Чем могу помочь</h2>
+            <h2>{l.source ? "Описание объявления" : "Чем могу помочь"}</h2>
             <p className="preserve-lines">{l.description}</p>
             <div className="tag-list">
               {l.tags.map((tag) => (
@@ -557,36 +582,113 @@ export function ListingPage({ create }: { create: CreateAction }) {
               ))}
             </div>
           </section>
+          {l.source && (
+            <div className="source-attribution">
+              <Send size={19} />
+              <div>
+                <strong>Из @{l.source.channel}</strong>
+                <p>
+                  Копия объявления от {date(l.source.postedAt)}. Наличие, цену и
+                  условия уточните у автора в Telegram.
+                </p>
+                <a
+                  href={l.source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Оригинал объявления <ExternalLink size={13} />
+                </a>
+              </div>
+            </div>
+          )}
+          <ReportButton
+            targetType="listing"
+            targetId={l.id}
+            targetLabel={l.title}
+            ownerId={l.providerId}
+            onReport={report}
+          />
+          {user?.isOperator && (
+            <Link
+              className="quiet-link"
+              to={`/operator?tab=listings&q=${encodeURIComponent(l.id)}`}
+            >
+              Модерация предложения
+              <ArrowUpRight size={15} />
+            </Link>
+          )}
         </div>
         <aside className="sticky-aside">
           <div className="content-card provider-card">
-            <span className="large-avatar">{l.providerName[0]}</span>
+            <span className="large-avatar">{listingAuthor(l)[0]}</span>
             <h2>
-              {l.providerName}
-              {l.providerVerified && <BadgeCheck size={20} className="green" />}
+              {listingAuthor(l)}
+              {!l.source && l.providerVerified && (
+                <BadgeCheck size={20} className="green" />
+              )}
             </h2>
-            <span className="muted small">Местный исполнитель · {l.city}</span>
+            <span className="muted small">
+              {l.source
+                ? "Автор объявления в Telegram"
+                : `Местный исполнитель · ${l.city}`}
+            </span>
+            {!l.source && (
+              <ReportButton
+                targetType="user"
+                targetId={l.providerId}
+                targetLabel={l.providerName}
+                ownerId={l.providerId}
+                onReport={report}
+              />
+            )}
             <div className="price-divider" />
-            <span className="muted small">Стоимость от</span>
+            <span className="muted small">
+              {l.source ? "Условия автора" : "Стоимость от"}
+            </span>
             <div className="big-price">
-              {euro(l.price)} <span>/ {l.unit}</span>
+              {l.source ? (
+                <span className="source-detail-price">{listingPrice(l)}</span>
+              ) : (
+                <>
+                  {euro(l.price)} <span>/ {l.unit}</span>
+                </>
+              )}
             </div>
-            <button
-              className="button primary full"
-              onClick={() => create("request", l)}
-            >
-              Создать заявку
-              <ArrowUpRight size={18} />
-            </button>
-            <p className="muted small">
-              Создадим заявку на площадке по этому предложению. Исполнители
-              смогут прислать отклики — вы сравните условия и выберете
-              подходящего.
-            </p>
-            <div className="form-note">
-              <ShieldCheck size={21} />
-              <p>Контакты открываются в заказе после выбора исполнителя.</p>
-            </div>
+            {l.source ? (
+              <>
+                <a
+                  className="button primary full"
+                  href={l.source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Открыть в Telegram <ExternalLink size={17} />
+                </a>
+                <p className="muted small">
+                  Договориться с автором можно в оригинальном объявлении. Заказ
+                  и переписка на blizu для этой карточки недоступны.
+                </p>
+              </>
+            ) : (
+              <>
+                <button
+                  className="button primary full"
+                  onClick={() => create("request", l)}
+                >
+                  Создать заявку
+                  <ArrowUpRight size={18} />
+                </button>
+                <p className="muted small">
+                  Создадим заявку на площадке по этому предложению. Исполнители
+                  смогут прислать отклики — вы сравните условия и выберете
+                  подходящего.
+                </p>
+                <div className="form-note">
+                  <ShieldCheck size={21} />
+                  <p>Контакты открываются в заказе после выбора исполнителя.</p>
+                </div>
+              </>
+            )}
           </div>
         </aside>
       </div>

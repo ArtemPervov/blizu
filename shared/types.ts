@@ -80,6 +80,7 @@ export type User = {
   contact: string;
   rating: number;
   verified: boolean;
+  isOperator: boolean;
 };
 export type Listing = {
   id: string;
@@ -97,6 +98,22 @@ export type Listing = {
   providerVerified: boolean;
   reviewCount: number;
   createdAt: string;
+  hidden?: boolean;
+  moderationReason?: string;
+  ownerBlocked?: boolean;
+  source?: ListingSource;
+};
+export type ListingSource = {
+  kind: "telegram";
+  channel: string;
+  messageId: number;
+  authorName: string;
+  postedAt: string;
+  importedAt: string;
+  url: string;
+  priceLabel: string;
+  priceKnown: boolean;
+  photos: string[];
 };
 export type ServiceRequest = {
   id: string;

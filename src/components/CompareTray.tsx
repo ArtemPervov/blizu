@@ -2,13 +2,15 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, BadgeCheck, Columns3, Star, X } from "lucide-react";
 import { useMarket } from "../market-state";
-import { euro } from "../lib";
 import { CATEGORIES } from "../../shared/types";
-import { Modal } from "./ui";
+import { Empty, ErrorState, Loading, Modal } from "./ui";
+import { useAvailableListings } from "../available-listings";
+import { listingPrice, listingAuthor, listingCity } from "../listing-format";
 
 export function CompareTray() {
   const { compared, toggleCompare, clearCompare } = useMarket();
   const [open, setOpen] = useState(false);
+  const available = useAvailableListings(compared, open);
   if (!compared.length) return null;
   return (
     <>
@@ -55,88 +57,105 @@ export function CompareTray() {
             задаче. Цены «от» указаны за разные единицы — учитывайте их при
             выборе.
           </p>
-          <div className="compare-table-wrap">
-            <table className="compare-table">
-              <caption className="visually-hidden">
-                Сравнение выбранных предложений
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Что важно</th>
-                  {compared.map((item) => (
-                    <th key={item.id} scope="col">
-                      <img src={item.image} alt="" />
-                      {item.title}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <th scope="row">Стоимость от</th>
-                  {compared.map((item) => (
-                    <td key={item.id}>
-                      <strong>{euro(item.price)}</strong>
-                      <small>за {item.unit}</small>
-                    </td>
-                  ))}
-                </tr>
-                <tr>
-                  <th scope="row">Город</th>
-                  {compared.map((item) => (
-                    <td key={item.id}>{item.city}</td>
-                  ))}
-                </tr>
-                <tr>
-                  <th scope="row">Категория</th>
-                  {compared.map((item) => (
-                    <td key={item.id}>
-                      {CATEGORIES.find((c) => c.id === item.category)?.name}
-                    </td>
-                  ))}
-                </tr>
-                <tr>
-                  <th scope="row">Исполнитель</th>
-                  {compared.map((item) => (
-                    <td key={item.id}>
-                      {item.providerName}
-                      {item.providerVerified && (
-                        <span className="compare-verified">
-                          <BadgeCheck size={14} />
-                          Профиль отмечен
-                        </span>
-                      )}
-                    </td>
-                  ))}
-                </tr>
-                <tr>
-                  <th scope="row">Оценка</th>
-                  {compared.map((item) => (
-                    <td key={item.id}>
-                      <Star size={13} />
-                      {item.providerRating.toFixed(1)}
-                      <small>{item.reviewCount} оценок</small>
-                    </td>
-                  ))}
-                </tr>
-                <tr>
-                  <th scope="row">Следующий шаг</th>
-                  {compared.map((item) => (
-                    <td key={item.id}>
-                      <Link
-                        className="button secondary"
-                        to={`/listings/${item.id}`}
-                        onClick={() => setOpen(false)}
-                      >
-                        Подробнее
-                        <ArrowRight size={14} />
-                      </Link>
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          {available.loading ? (
+            <Loading />
+          ) : available.error ? (
+            <ErrorState error={available.error} retry={available.refetch} />
+          ) : !available.items.length ? (
+            <Empty
+              title="Предложения больше недоступны"
+              description="Выберите другие варианты из каталога."
+            />
+          ) : (
+            <div className="compare-table-wrap">
+              <table className="compare-table">
+                <caption className="visually-hidden">
+                  Сравнение выбранных предложений
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Что важно</th>
+                    {available.items.map((item) => (
+                      <th key={item.id} scope="col">
+                        <img src={item.image} alt="" />
+                        {item.title}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">Стоимость от</th>
+                    {available.items.map((item) => (
+                      <td key={item.id}>
+                        <strong>{listingPrice(item)}</strong>
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th scope="row">Город</th>
+                    {available.items.map((item) => (
+                      <td key={item.id}>{listingCity(item)}</td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th scope="row">Категория</th>
+                    {available.items.map((item) => (
+                      <td key={item.id}>
+                        {CATEGORIES.find((c) => c.id === item.category)?.name}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th scope="row">Исполнитель</th>
+                    {available.items.map((item) => (
+                      <td key={item.id}>
+                        {listingAuthor(item)}
+                        {item.source && <small>Автор в Telegram</small>}
+                        {!item.source && item.providerVerified && (
+                          <span className="compare-verified">
+                            <BadgeCheck size={14} />
+                            Профиль отмечен
+                          </span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th scope="row">Оценка</th>
+                    {available.items.map((item) => (
+                      <td key={item.id}>
+                        {item.source ? (
+                          <small>Нет оценок на blizu</small>
+                        ) : (
+                          <>
+                            <Star size={13} />
+                            {item.providerRating.toFixed(1)}
+                            <small>{item.reviewCount} оценок</small>
+                          </>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th scope="row">Следующий шаг</th>
+                    {available.items.map((item) => (
+                      <td key={item.id}>
+                        <Link
+                          className="button secondary"
+                          to={`/listings/${item.id}`}
+                          onClick={() => setOpen(false)}
+                        >
+                          Подробнее
+                          <ArrowRight size={14} />
+                        </Link>
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
         </Modal>
       )}
     </>

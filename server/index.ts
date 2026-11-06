@@ -1,6 +1,7 @@
 import { createApp, passwordHash } from "./app.js";
 import { now } from "./db.js";
 import { randomUUID } from "node:crypto";
+import { provisionOperator } from "./provision-operator.js";
 
 const production = process.env.NODE_ENV === "production";
 const staleHours = Number(process.env.DELIVERY_STALE_HOURS ?? 72);
@@ -39,6 +40,7 @@ if (
     now(),
   );
 }
+await provisionOperator(store, process.env.OPERATOR_EMAIL, process.env.OPERATOR_PASSWORD);
 const server = app.listen(Number(process.env.PORT ?? 3001), "0.0.0.0", () =>
   console.log(`blizu API http://localhost:${process.env.PORT ?? 3001}`),
 );

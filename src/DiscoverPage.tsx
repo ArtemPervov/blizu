@@ -18,6 +18,7 @@ import {
   MessageCircle,
   Package,
   Search,
+  Send,
   ShieldCheck,
   ShoppingBag,
   SlidersHorizontal,
@@ -36,6 +37,9 @@ import { api, euro, plural } from "./lib";
 import { useMarket } from "./market-state";
 import { Empty, ErrorState, ListingCard, Modal } from "./components/ui";
 import type { CreateAction } from "./App";
+import { useAvailableListings } from "./available-listings";
+import { AdriaticLight } from "./components/AdriaticLight";
+import { listingCity, listingPrice } from "./listing-format";
 
 const icons = {
   all: Grid2X2,
@@ -102,11 +106,17 @@ export function DiscoverPage({
   create: CreateAction;
   meta?: {
     demo: boolean;
-    stats: { listings: number; providers: number; requests: number };
+    stats: {
+      listings: number;
+      providers: number;
+      requests: number;
+      imported?: number;
+    };
   };
 }) {
   const [params, setParams] = useSearchParams();
   const q = (params.get("q") || "").slice(0, 200);
+  const telegramOnly = params.get("source") === "telegram";
   const category = CATEGORIES.some((item) => item.id === params.get("category"))
     ? params.get("category")!
     : "all";
@@ -143,6 +153,7 @@ export function DiscoverPage({
     }
   });
   const market = useMarket();
+  const recent = useAvailableListings(market.recent.slice(0, 4));
   useEffect(() => setSearch(q), [q]);
   useEffect(() => {
     setMinDraft(min);
@@ -154,6 +165,7 @@ export function DiscoverPage({
     category,
     city,
     sort,
+    ...(telegramOnly ? { source: "telegram" } : {}),
     limit: String(PAGE_SIZE),
     offset: String((page - 1) * PAGE_SIZE),
     ...(min ? { minPrice: min } : {}),
@@ -224,6 +236,9 @@ export function DiscoverPage({
     setFiltersOpen(false);
   };
   const chips = [
+    ...(telegramOnly
+      ? [{ label: "Из Telegram", clear: () => update({ source: "" }) }]
+      : []),
     ...(q
       ? [
           {
@@ -368,6 +383,7 @@ export function DiscoverPage({
     <div className="discover-page">
       <section className="discover-hero" aria-labelledby="discover-title">
         <div className="discover-intro">
+          <AdriaticLight />
           <div className="discovery-eyebrow">
             <span />
             ДЛЯ ЖИЗНИ В ЧЕРНОГОРИИ
@@ -519,7 +535,11 @@ export function DiscoverPage({
               {isFetching
                 ? "Обновляем предложения…"
                 : `${data?.total ?? 0} ${plural(data?.total ?? 0, ["предложение", "предложения", "предложений"])}${city !== "Вся Черногория" ? ` · ${city}` : " по всей Черногории"}`}
-              {meta?.demo && <span className="demo-tag">Демо-каталог</span>}
+              {meta?.demo && (
+                <span className="demo-tag">
+                  {meta.stats.imported ? "Локальная версия" : "Демо-каталог"}
+                </span>
+              )}
             </p>
           </div>
           <Link className="quiet-link" to="/requests">
@@ -527,6 +547,28 @@ export function DiscoverPage({
             <ArrowUpRight size={16} />
           </Link>
         </div>
+        {!!meta?.stats.imported && (
+          <div
+            className="catalog-source-switch"
+            role="group"
+            aria-label="Источник предложений"
+          >
+            <button
+              type="button"
+              aria-pressed={!telegramOnly}
+              onClick={() => update({ source: "" })}
+            >
+              Все предложения
+            </button>
+            <button
+              type="button"
+              aria-pressed={telegramOnly}
+              onClick={() => update({ source: "telegram", sort: "newest" })}
+            >
+              <Send size={14} /> Из Telegram <span>{meta.stats.imported}</span>
+            </button>
+          </div>
+        )}
         <div className="catalog-layout">
           <aside className="catalog-sidebar" aria-label="Фильтры каталога">
             {filterPanel}
@@ -694,7 +736,7 @@ export function DiscoverPage({
           <ArrowUpRight size={18} />
         </button>
       </section>
-      {market.recent.length > 0 && (
+      {recent.items.length > 0 && (
         <section className="recent-section">
           <div className="discovery-section-heading">
             <div>
@@ -705,13 +747,13 @@ export function DiscoverPage({
             </div>
           </div>
           <div className="recent-grid">
-            {market.recent.slice(0, 4).map((item) => (
+            {recent.items.map((item) => (
               <Link key={item.id} to={`/listings/${item.id}`}>
                 <img src={item.image} alt="" />
                 <div>
                   <strong>{item.title}</strong>
                   <span>
-                    {item.city} · от {euro(item.price)}
+                    {listingCity(item)} · {listingPrice(item)}
                   </span>
                 </div>
                 <ArrowUpRight size={16} />

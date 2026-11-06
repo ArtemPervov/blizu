@@ -1,0 +1,181 @@
+/* Native controls keep their keyboard, touch and form behaviour. */
+:root {
+  --scroll-thumb: #6e8d89;
+  --scroll-track: #eeece6;
+}
+
+html,
+body,
+body * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: var(--scroll-track);
+}
+::-webkit-scrollbar-thumb {
+  min-height: 36px;
+  border: 3px solid var(--scroll-track);
+  border-radius: 20px;
+  background: var(--scroll-thumb);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #6a9292;
+}
+
+select {
+  color-scheme: light;
+  cursor: pointer;
+  accent-color: var(--accent, #28646d);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+select:focus-visible {
+  outline: 2px solid #28646d;
+  outline-offset: 3px;
+}
+select option {
+  color: #282826;
+  background: #faf9f6;
+}
+
+/* The picker lives in the top layer, including when used inside a dialog.
+   Older browsers retain the native popup and the styled closed control. */
+@supports (appearance: base-select) {
+  select,
+  select::picker(select) {
+    appearance: base-select;
+  }
+  select {
+    align-items: center;
+    gap: 10px;
+    background-image: none !important;
+  }
+  select::picker-icon {
+    color: #6c8b8d;
+    font-size: 12px;
+    transition: rotate 180ms ease;
+  }
+  select:open::picker-icon {
+    rotate: 180deg;
+  }
+  select:open {
+    border-color: #a5c2c2;
+  }
+  select::picker(select) {
+    box-sizing: border-box;
+    min-width: max(180px, anchor-size(width));
+    max-width: calc(100vw - 24px);
+    max-height: min(360px, 55dvh);
+    margin-block: 8px;
+    padding: 6px;
+    border: 1px solid #d8e2df;
+    border-radius: 16px;
+    background: #fafbf8;
+    background: rgb(250 251 248 / 97%);
+    backdrop-filter: blur(20px);
+    box-shadow:
+      0 18px 50px rgb(33 56 56 / 12%),
+      0 3px 10px rgb(33 56 56 / 4%);
+    color: #282826;
+    font:
+      500 14px / 1.45 "Manrope",
+      sans-serif;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #6e8d89 transparent;
+    opacity: 0;
+    transition:
+      opacity 140ms ease,
+      display 140ms allow-discrete,
+      overlay 140ms allow-discrete;
+  }
+  select:open::picker(select) {
+    opacity: 1;
+  }
+  select option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 43px;
+    padding: 11px 13px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+  select option:hover,
+  select option:focus-visible {
+    background: #edf2ee;
+    outline: none;
+  }
+  select option:checked {
+    background: #e3eff0;
+    color: #1e5058;
+    font-weight: 650;
+  }
+  select option::checkmark {
+    order: 1;
+    margin-left: auto;
+    color: #28646d;
+  }
+  select option:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .city-control select::picker-icon,
+  .language-control select::picker-icon {
+    display: none;
+  }
+  .city-control select::picker(select),
+  .language-control select::picker(select) {
+    min-width: 190px;
+  }
+  .language-control select::picker(select) {
+    min-width: 110px;
+  }
+  @starting-style {
+    select:open::picker(select) {
+      opacity: 0;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  select,
+  select::picker-icon,
+  select::picker(select) {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  html,
+  body,
+  body * {
+    scrollbar-color: auto;
+  }
+  select::picker(select),
+  select option:checked {
+    border-color: ButtonText;
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: none;
+  }
+  select option:checked {
+    outline: 1px solid Highlight;
+  }
+}

@@ -26,6 +26,7 @@ import { api, json, euro, useAuth, useI18n, useToast } from "../lib";
 const ParticleScene = lazy(() => import("./Particles"));
 import { useMarket } from "../market-state";
 import { BrandIllustration, type IllustrationKind } from "./BrandIllustration";
+import { listingAuthor, listingCity } from "../listing-format";
 
 export function Brand() {
   return (
@@ -243,7 +244,10 @@ export function ListingCard({
       <div className="listing-body">
         <div className="listing-location">
           <MapPin size={12} />
-          {listing.city}
+          {listingCity(listing)}
+          {listing.hidden && (
+            <span className="listing-moderation-label">Скрыто оператором</span>
+          )}
         </div>
         <h3 className="listing-heading">
           <Link className="listing-title" to={`/listings/${listing.id}`}>
@@ -252,9 +256,17 @@ export function ListingCard({
         </h3>
         <div className="listing-bottom">
           <div>
-            <span className="muted small">{t.from} </span>
-            <strong>{euro(listing.price)}</strong>
-            <span className="muted small"> / {listing.unit}</span>
+            {listing.source ? (
+              <strong className="source-price">
+                {listing.source.priceLabel}
+              </strong>
+            ) : (
+              <>
+                <span className="muted small">{t.from} </span>
+                <strong>{euro(listing.price)}</strong>
+                <span className="muted small"> / {listing.unit}</span>
+              </>
+            )}
           </div>
           <Link
             className="card-arrow"
@@ -267,24 +279,30 @@ export function ListingCard({
         <p className="listing-excerpt">{listing.description}</p>
         <div className="provider-line">
           <span className="mini-avatar">
-            {listing.providerName.slice(0, 1)}
+            {listingAuthor(listing).slice(0, 1)}
           </span>
-          <span className="listing-provider-name">{listing.providerName}</span>
-          {listing.providerVerified && (
+          <span className="listing-provider-name">
+            {listingAuthor(listing)}
+          </span>
+          {!listing.source && listing.providerVerified && (
             <BadgeCheck
               size={14}
               className="green"
               aria-label="Профиль с отметкой"
             />
           )}
-          <span
-            className="listing-provider-rating"
-            aria-label={`Рейтинг ${listing.providerRating.toFixed(1)}, отзывов: ${listing.reviewCount}`}
-          >
-            <Star size={12} fill="currentColor" />
-            {listing.providerRating.toFixed(1)}
-            <span>({listing.reviewCount})</span>
-          </span>
+          {listing.source ? (
+            <span className="source-card-badge">Telegram</span>
+          ) : (
+            <span
+              className="listing-provider-rating"
+              aria-label={`Рейтинг ${listing.providerRating.toFixed(1)}, отзывов: ${listing.reviewCount}`}
+            >
+              <Star size={12} fill="currentColor" />
+              {listing.providerRating.toFixed(1)}
+              <span>({listing.reviewCount})</span>
+            </span>
+          )}
         </div>
       </div>
       {onCompare && (

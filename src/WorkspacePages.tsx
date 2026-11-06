@@ -104,6 +104,7 @@ function WorkspaceFrame({
             <strong>{user.name}</strong>
             <span className="profile-role">
               {roleNames[user.role]}
+              {user.isOperator && " · Оператор"}
               {user.verified && (
                 <BadgeCheck size={15} aria-label="Профиль с отметкой" />
               )}
@@ -125,6 +126,13 @@ function WorkspaceFrame({
               Избранное
               <ArrowUpRight size={14} />
             </NavLink>
+            {user.isOperator && (
+              <NavLink to="/operator">
+                <ShieldCheck size={18} />
+                Оператор
+                <ArrowUpRight size={14} />
+              </NavLink>
+            )}
           </nav>
           <button
             className="profile-details-toggle"

@@ -7,6 +7,11 @@ import { JSDOM } from "jsdom";
 import request from "supertest";
 import { createApp } from "../server/app";
 import { Store } from "../server/db";
+import { importTelegramAds } from "../server/import-telegram";
+import {
+  selectTelegramAds,
+  TELEGRAM_GROUP_ID,
+} from "../server/telegram-export";
 const test = (name: string, fn: () => Promise<void>) =>
   nodeTest(name, { timeout: 20000 }, fn);
 
@@ -160,6 +165,43 @@ function header() {
   return within(screen.getByRole("banner"));
 }
 
+test("imported Telegram ads keep provenance and ambiguous prices and link to the author instead of creating an order", async () => {
+  const ads = selectTelegramAds({
+    id: TELEGRAM_GROUP_ID,
+    type: "public_supergroup",
+    messages: [
+      {
+        id: 900,
+        type: "message",
+        date_unixtime: "1793966400",
+        from: "Автор Telegram",
+        from_id: "private-test-id",
+        text: "Продам мебель в Будве. Стол 50 евро, два стула по 15 евро.",
+      },
+    ],
+  });
+  importTelegramAds(fixture.store, ads, dir, dir);
+  mount("/?source=telegram&sort=newest");
+  await waitFor(() => assert.equal(screen.getAllByRole("article").length, 1));
+  const card = within(screen.getByRole("article"));
+  assert.ok(card.getByText("Цены в объявлении"));
+  assert.ok(card.getByText("Автор Telegram"));
+  assert.ok(!card.queryByText("0,0"));
+  assert.ok(!card.queryByText("0 €"));
+  fireEvent.click(card.getByRole("link", { name: ads[0].title, exact: true }));
+  await screen.findByRole("heading", { name: "Описание объявления" });
+  const contact = screen.getByRole("link", { name: "Открыть в Telegram" });
+  assert.equal(contact.getAttribute("href"), "https://t.me/montenegrobye/900");
+  assert.ok(screen.getByRole("link", { name: "Оригинал объявления" }));
+  assert.ok(
+    !within(contact.closest("aside")!).queryByRole("button", {
+      name: "Создать заявку",
+      exact: true,
+    }),
+  );
+  assert.ok(!document.body.textContent?.includes("private-test-id"));
+});
+
 test("catalog applies bookmarked search, city and budget through the real API", async () => {
   mount("/?q=Кондиционер&city=Бар&maxPrice=40&sort=price");
   await waitFor(() => assert.equal(screen.getAllByRole("article").length, 1));
@@ -281,7 +323,7 @@ test("comparison keeps selections across routes and recent views return on disco
   const dialog = within(
     screen.getByRole("dialog", { name: "Выбирайте с уверенностью" }),
   );
-  assert.ok(dialog.getByRole("table"));
+  assert.ok(await dialog.findByRole("table"));
   assert.ok(dialog.getByText(/разные единицы/));
   fireEvent.click(dialog.getByRole("button", { name: "Закрыть", exact: true }));
   const titleLink = within(items[0])
@@ -653,4 +695,213 @@ test("private orders require sign-in and arbiter workspace exposes disputes", as
     "true",
   );
   assert.ok(await screen.findByRole("region", { name: "Споры" }));
+});
+
+test("operator page denies ordinary users and moderators can hide a listing with a recorded reason", async () => {
+  await agent.post("/api/auth/demo").send({ role: "customer" }).expect(200);
+  mount("/operator");
+  assert.ok(await screen.findByRole("heading", { name: "Доступ ограничен" }));
+  assert.ok(!screen.queryByRole("navigation", { name: "Разделы панели" }));
+  cleanup();
+  client.clear();
+  await Promise.allSettled([...inflight]);
+  await agent.post("/api/auth/demo").send({ role: "operator" }).expect(200);
+  mount("/operator?tab=listings&q=Кондиционер");
+  const table = within(
+    await screen.findByRole("table", { name: "Предложения сервиса" }),
+  );
+  const row = table
+    .getAllByRole("row")
+    .find((row) => row.textContent?.includes("Кондиционер снова как новый"))!;
+  fireEvent.click(
+    within(row).getByRole("button", { name: "Скрыть", exact: true }),
+  );
+  const dialog = within(
+    screen.getByRole("dialog", { name: "Скрыть предложение" }),
+  );
+  fireEvent.change(dialog.getByLabelText("Причина решения"), {
+    target: { value: "Предложение временно скрыто для проверки описания." },
+  });
+  fireEvent.click(
+    dialog.getByRole("button", { name: "Скрыть предложение", exact: true }),
+  );
+  await waitFor(() => {
+    if (screen.queryByRole("dialog"))
+      throw new Error("Moderation is still pending");
+  });
+  await waitFor(() =>
+    assert.ok(screen.getByText("Скрыто оператором", { exact: true })),
+  );
+  const response = await agent.get("/api/operator/audit").expect(200);
+  assert.equal(response.body.items[0].action, "listing.hide");
+  assert.match(response.body.items[0].reason, /проверки описания/);
+  const publicListing = await agent
+    .get("/api/listings?ids=l-repair")
+    .expect(200);
+  assert.equal(publicListing.body.items.length, 0);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Снять скрытие", exact: true }),
+  );
+  const restore = within(screen.getByRole("dialog", { name: "Снять скрытие" }));
+  fireEvent.change(restore.getByLabelText("Причина решения"), {
+    target: { value: "Проверка завершена, предложение снова доступно." },
+  });
+  fireEvent.click(
+    restore.getByRole("button", { name: "Снять скрытие", exact: true }),
+  );
+  await waitFor(() => {
+    if (screen.queryByRole("dialog"))
+      throw new Error("Restore is still pending");
+  });
+  await waitFor(() =>
+    assert.ok(screen.getByText("В каталоге", { selector: ".operator-badge" })),
+  );
+});
+
+test("a guest report resumes after sign-in and operator review hides the target and notifies its reporter", async () => {
+  mount("/listings/l-repair");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Пожаловаться на предложение" }),
+  );
+  const auth = within(
+    await screen.findByRole("dialog", { name: "С возвращением" }),
+  );
+  fireEvent.click(
+    await auth.findByRole("button", { name: "Заказчик", exact: true }),
+  );
+  const report = within(
+    await screen.findByRole("dialog", { name: "Сообщить о проблеме" }),
+  );
+  fireEvent.change(report.getByLabelText("Причина обращения"), {
+    target: { value: "fraud" },
+  });
+  fireEvent.change(report.getByLabelText("Что произошло?"), {
+    target: {
+      value:
+        "Описание предложения вводит в заблуждение, прошу проверить условия.",
+    },
+  });
+  fireEvent.click(report.getByRole("button", { name: "Отправить обращение" }));
+  await waitFor(() => {
+    if (screen.queryByRole("dialog"))
+      throw new Error("Report submission is pending");
+  });
+  cleanup();
+  client.clear();
+  await Promise.allSettled([...inflight]);
+  await agent.post("/api/auth/demo").send({ role: "operator" }).expect(200);
+  mount("/operator");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Рассмотреть", exact: true }),
+  );
+  const review = within(
+    screen.getByRole("dialog", { name: "Рассмотрение обращения" }),
+  );
+  assert.ok(review.getByText(/вводит в заблуждение/));
+  fireEvent.change(review.getByLabelText("Действие над объектом"), {
+    target: { value: "hide" },
+  });
+  fireEvent.change(review.getByLabelText("Решение и основание"), {
+    target: { value: "Предложение скрыто до уточнения указанных условий." },
+  });
+  fireEvent.click(review.getByRole("button", { name: "Сохранить решение" }));
+  await waitFor(() => {
+    if (screen.queryByRole("dialog"))
+      throw new Error("Report review is pending");
+  });
+  const reports = await agent
+    .get("/api/operator/reports?state=resolved")
+    .expect(200);
+  assert.equal(reports.body.items.length, 1);
+  assert.equal(reports.body.items[0].status, "resolved");
+  await agent.post("/api/auth/demo").send({ role: "customer" }).expect(200);
+  const notifications = await agent.get("/api/notifications").expect(200);
+  assert.ok(
+    notifications.body.items.some((item: { text: string }) =>
+      item.text.includes("Предложение скрыто до уточнения"),
+    ),
+  );
+});
+
+test("guest saved snapshots and recently viewed items are checked against current public visibility", async () => {
+  const item = (await agent.get("/api/listings/l-repair").expect(200)).body
+    .item;
+  localStorage.setItem("blizu.guest-saved.v1", JSON.stringify([item]));
+  localStorage.setItem("blizu.recent.v1", JSON.stringify([item]));
+  await agent.post("/api/auth/demo").send({ role: "operator" }).expect(200);
+  await agent
+    .patch("/api/operator/listings/l-repair")
+    .send({
+      action: "hide",
+      reason: "Предложение скрыто по результатам проверки команды.",
+    })
+    .expect(200);
+  await agent.post("/api/auth/logout").send({}).expect(200);
+  mount("/favorites");
+  await screen.findByRole("heading", { name: "Сохраните полезные контакты" });
+  assert.equal(screen.queryAllByRole("article").length, 0);
+  assert.ok(!screen.queryByRole("link", { name: item.title, exact: true }));
+  fireEvent.click(
+    within(
+      screen.getByRole("navigation", { name: "Основная навигация" }),
+    ).getByRole("link", { name: "Услуги и товары" }),
+  );
+  await waitFor(() => assert.equal(screen.getAllByRole("article").length, 7));
+  assert.ok(!screen.queryByRole("heading", { name: "Вы недавно смотрели" }));
+});
+
+test("operator user controls block and unblock an account and the audit tab shows both changes", async () => {
+  await agent.post("/api/auth/demo").send({ role: "operator" }).expect(200);
+  mount("/operator?tab=users&q=Сергей");
+  const users = within(
+    await screen.findByRole("table", { name: "Пользователи сервиса" }),
+  );
+  fireEvent.click(
+    users.getByRole("button", { name: "Блокировать", exact: true }),
+  );
+  let dialog = within(
+    screen.getByRole("dialog", { name: "Блокировать", exact: true }),
+  );
+  fireEvent.change(dialog.getByLabelText("Причина решения"), {
+    target: { value: "Аккаунт временно заблокирован для проверки обращений." },
+  });
+  fireEvent.click(
+    dialog.getByRole("button", { name: "Блокировать", exact: true }),
+  );
+  await waitFor(() => {
+    if (screen.queryByRole("dialog")) throw new Error("Blocking is pending");
+  });
+  fireEvent.change(screen.getByLabelText("Фильтр панели"), {
+    target: { value: "blocked" },
+  });
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "Снять блокировку",
+      exact: true,
+    }),
+  );
+  dialog = within(
+    screen.getByRole("dialog", { name: "Снять блокировку", exact: true }),
+  );
+  fireEvent.change(dialog.getByLabelText("Причина решения"), {
+    target: { value: "Проверка завершена, доступ участника восстановлен." },
+  });
+  fireEvent.click(
+    dialog.getByRole("button", { name: "Снять блокировку", exact: true }),
+  );
+  await waitFor(() => {
+    if (screen.queryByRole("dialog")) throw new Error("Unblocking is pending");
+  });
+  fireEvent.click(
+    within(
+      screen.getByRole("navigation", { name: "Разделы панели" }),
+    ).getByRole("button", { name: "Журнал действий" }),
+  );
+  const audit = within(
+    await screen.findByRole("table", { name: "Журнал действий оператора" }),
+  );
+  assert.ok(audit.getByText("Аккаунт заблокирован"));
+  assert.ok(audit.getByText("Аккаунт разблокирован"));
+  assert.ok(audit.getAllByText("Блокировка: да").length > 0);
+  assert.ok(audit.getAllByText("Блокировка: нет").length > 0);
 });

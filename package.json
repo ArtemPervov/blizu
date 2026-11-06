@@ -13,10 +13,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
     "build": "npm run typecheck && vite build && tsc -p tsconfig.server.json",
     "start": "node --env-file-if-exists=.env dist-server/server/index.js",
-    "test": "tsx --test server/app.test.ts tests/ux.test.tsx",
-    "test:api": "tsx --test server/app.test.ts",
+    "test": "tsx --test server/app.test.ts server/operator.test.ts server/telegram.test.ts tests/ux.test.tsx",
+    "test:api": "tsx --test server/app.test.ts server/operator.test.ts server/telegram.test.ts",
     "test:ux": "tsx --test tests/ux.test.tsx",
-    "admin:create": "tsx --env-file-if-exists=.env server/admin.ts"
+    "admin:create": "tsx --env-file-if-exists=.env server/admin.ts",
+    "operator:create": "tsx --env-file-if-exists=.env server/operator-account.ts create",
+    "operator:grant": "tsx --env-file-if-exists=.env server/operator-account.ts grant",
+    "operator:revoke": "tsx --env-file-if-exists=.env server/operator-account.ts revoke",
+    "import:telegram": "tsx server/import-telegram.ts"
   },
   "dependencies": {
     "@react-three/fiber": "^9.4.0",

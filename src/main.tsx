@@ -7,6 +7,10 @@ import App from "./App";
 import "./styles.css";
 import "./marketplace.css";
 import "./refined.css";
+import "./operator.css";
+import "./adriatic-light.css";
+import "./controls.css";
+import "./telegram.css";
 import { MarketProvider } from "./market-state";
 const queryClient = new QueryClient({
   defaultOptions: {

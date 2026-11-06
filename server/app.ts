@@ -29,7 +29,16 @@ import {
   type Offer,
   type Incident,
 } from "../shared/types.js";
-import { Store, now, seedDemo } from "./db.js";
+import { Store, now, seedDemo, seedDemoOperator } from "./db.js";
+import { HttpError } from "./errors.js";
+export { HttpError } from "./errors.js";
+import {
+  isBlocked,
+  operatorAccessSql,
+  VISIBLE_LISTING_SQL,
+} from "./moderation.js";
+import { registerOperatorRoutes } from "./operator.js";
+import { attachListingSources } from "./listing-sources.js";
 
 const scryptAsync = promisify(scrypt);
 const userSelect = "id,name,email,city,role,contact,rating,verified";
@@ -52,15 +61,7 @@ const link = z
     (value) => /^https?:\/\//i.test(value),
     "Используйте ссылку http или https",
   );
-export class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-type AuthRequest = Request & { user?: User };
+export type AuthRequest = Request & { user?: User };
 export type AppOptions = {
   store?: Store;
   demo?: boolean;
@@ -95,12 +96,15 @@ export function createApp(options: AppOptions = {}) {
   if (
     production &&
     !demo &&
-    store.get("SELECT id FROM users WHERE id=?", "demo-customer")
+    store.get("SELECT id FROM users WHERE id LIKE 'demo-%'")
   )
     throw new Error(
       "A database with demo accounts cannot be used in production with ENABLE_DEMO=false. Use a clean production volume.",
     );
-  if (demo) seedDemo(store);
+  if (demo) {
+    seedDemo(store);
+    seedDemoOperator(store);
+  }
   const uploadDir = resolve(dataDir, "uploads");
   mkdirSync(uploadDir, { recursive: true });
   const app = express();
@@ -156,11 +160,16 @@ export function createApp(options: AppOptions = {}) {
           .map((c) => `u.${c}`)
           .join(
             ",",
-          )} FROM sessions s JOIN users u ON u.id=s.userId WHERE s.token=? AND s.expiresAt>?`,
+          )},${operatorAccessSql("u")} isOperator FROM sessions s JOIN users u ON u.id=s.userId WHERE s.token=? AND s.expiresAt>? AND NOT EXISTS(SELECT 1 FROM account_restrictions ar WHERE ar.userId=u.id)`,
         digest(token),
         now(),
       );
-      if (user) req.user = { ...user, verified: Boolean(user.verified) };
+      if (user)
+        req.user = {
+          ...user,
+          verified: Boolean(user.verified),
+          isOperator: Boolean(user.isOperator),
+        };
     }
     next();
   });
@@ -180,6 +189,11 @@ export function createApp(options: AppOptions = {}) {
     message: { error: "Слишком много попыток. Попробуйте через 15 минут." },
   });
   function startSession(res: Response, userId: string) {
+    if (isBlocked(store, userId))
+      throw new HttpError(
+        403,
+        "Аккаунт заблокирован. Обратитесь в поддержку сервиса.",
+      );
     const token = randomBytes(32).toString("hex");
     store.run("DELETE FROM sessions WHERE expiresAt<?", now());
     store.run(
@@ -195,10 +209,15 @@ export function createApp(options: AppOptions = {}) {
       maxAge: 7 * 86400000,
       path: "/",
     });
-    return store.get<User>(
-      `SELECT ${userSelect} FROM users WHERE id=?`,
+    const user = store.get<User>(
+      `SELECT ${userSelect},${operatorAccessSql("users")} isOperator FROM users WHERE id=?`,
       userId,
-    );
+    )!;
+    return {
+      ...user,
+      verified: Boolean(user.verified),
+      isOperator: Boolean(user.isOperator),
+    };
   }
   function accessibleOrder(id: string, user: User): Order {
     const order = store.get<Order>(`${ordersSelect} WHERE o.id=?`, id);
@@ -273,13 +292,18 @@ export function createApp(options: AppOptions = {}) {
       categories: CATEGORIES,
       cities: CITIES,
       stats: {
-        listings: store.get<{ n: number }>("SELECT COUNT(*) n FROM listings")
-          ?.n,
+        imported:
+          store.get<{ n: number }>(
+            `SELECT COUNT(*) n FROM listing_sources ls JOIN listings l ON l.id=ls.listingId JOIN users u ON u.id=l.providerId WHERE ${VISIBLE_LISTING_SQL}`,
+          )?.n ?? 0,
+        listings: store.get<{ n: number }>(
+          `SELECT COUNT(*) n FROM listings l JOIN users u ON u.id=l.providerId WHERE ${VISIBLE_LISTING_SQL}`,
+        )?.n,
         providers: store.get<{ n: number }>(
-          "SELECT COUNT(*) n FROM users WHERE role='provider'",
+          "SELECT COUNT(*) n FROM users WHERE role='provider' AND id NOT LIKE 'source-%' AND id NOT IN (SELECT userId FROM account_restrictions)",
         )?.n,
         requests: store.get<{ n: number }>(
-          "SELECT COUNT(*) n FROM requests WHERE status='open'",
+          "SELECT COUNT(*) n FROM requests WHERE status='open' AND customerId NOT IN (SELECT userId FROM account_restrictions)",
         )?.n,
       },
     }),
@@ -340,7 +364,9 @@ export function createApp(options: AppOptions = {}) {
   if (demo)
     app.post("/api/auth/demo", authLimiter, (req, res) => {
       const { role } = z
-        .object({ role: z.enum(["customer", "provider", "arbiter"]) })
+        .object({
+          role: z.enum(["customer", "provider", "arbiter", "operator"]),
+        })
         .parse(req.body);
       res.json({ user: startSession(res, `demo-${role}`) });
     });
@@ -363,6 +389,8 @@ export function createApp(options: AppOptions = {}) {
     const input = z
       .object({
         q: z.string().max(200).optional(),
+        ids: z.string().max(11000).optional(),
+        source: z.enum(["telegram"]).optional(),
         category: z.string().max(40).optional(),
         city: z.string().max(80).optional(),
         sort: z
@@ -383,8 +411,21 @@ export function createApp(options: AppOptions = {}) {
         { message: "Минимальная цена не должна быть выше максимальной" },
       )
       .parse(req.query);
-    const where = ["1=1"];
+    const where = [VISIBLE_LISTING_SQL];
     const params: (string | number)[] = [];
+    if (input.source)
+      where.push(
+        "EXISTS (SELECT 1 FROM listing_sources ls WHERE ls.listingId=l.id)",
+      );
+    if (input.ids !== undefined) {
+      const ids = z
+        .array(z.string().min(1).max(100))
+        .min(1)
+        .max(100)
+        .parse(input.ids.split(","));
+      where.push(`l.id IN (${ids.map(() => "?").join(",")})`);
+      params.push(...ids);
+    }
     if (input.category && input.category !== "all") {
       where.push("l.category=?");
       params.push(input.category);
@@ -400,10 +441,16 @@ export function createApp(options: AppOptions = {}) {
       params.push(input.q.toLocaleLowerCase("ru"));
     }
     if (input.minPrice !== undefined) {
+      where.push(
+        "NOT EXISTS (SELECT 1 FROM listing_sources ls WHERE ls.listingId=l.id AND ls.priceKnown=0)",
+      );
       where.push("l.price>=?");
       params.push(input.minPrice);
     }
     if (input.maxPrice !== undefined) {
+      where.push(
+        "NOT EXISTS (SELECT 1 FROM listing_sources ls WHERE ls.listingId=l.id AND ls.priceKnown=0)",
+      );
       where.push("l.price<=?");
       params.push(input.maxPrice);
     }
@@ -419,11 +466,11 @@ export function createApp(options: AppOptions = {}) {
       )?.count ?? 0;
     const ordering =
       input.sort === "price"
-        ? "l.price ASC,l.id ASC"
+        ? "EXISTS(SELECT 1 FROM listing_sources ls WHERE ls.listingId=l.id AND ls.priceKnown=0) ASC,l.price ASC,l.id ASC"
         : input.sort === "price_desc"
-          ? "l.price DESC,l.id ASC"
+          ? "EXISTS(SELECT 1 FROM listing_sources ls WHERE ls.listingId=l.id AND ls.priceKnown=0) ASC,l.price DESC,l.id ASC"
           : input.sort === "newest"
-            ? "l.createdAt DESC,l.id ASC"
+            ? "l.createdAt DESC,COALESCE((SELECT ls.messageId FROM listing_sources ls WHERE ls.listingId=l.id),0) DESC,l.id ASC"
             : "u.rating DESC,l.reviewCount DESC,l.id ASC";
     let items: Record<string, unknown>[] = store
       .all<
@@ -434,21 +481,66 @@ export function createApp(options: AppOptions = {}) {
         tags: JSON.parse(String(l.tags)),
         providerVerified: Boolean(l.providerVerified),
       }));
-    res.json({ items, total });
+    res.json({ items: attachListingSources(store, items), total });
   });
-  app.get("/api/listings/:id", (req, res) => {
+  app.get("/api/listings/:id", (req: AuthRequest, res) => {
     const item = store.get<Record<string, unknown>>(
       `${listingsSelect} WHERE l.id=?`,
       String(req.params.id),
     );
     if (!item) throw new HttpError(404, "Предложение не найдено.");
+    const hidden = store.get<{ reason: string }>(
+      "SELECT reason FROM listing_moderation WHERE listingId=?",
+      String(item.id),
+    );
+    const ownerBlocked = isBlocked(store, String(item.providerId));
+    if (
+      (hidden || ownerBlocked) &&
+      req.user?.id !== item.providerId &&
+      !req.user?.isOperator
+    )
+      throw new HttpError(404, "Предложение не найдено.");
     res.json({
-      item: {
-        ...item,
-        tags: JSON.parse(String(item.tags)),
-        providerVerified: Boolean(item.providerVerified),
-      },
+      item: attachListingSources(store, [
+        {
+          ...item,
+          tags: JSON.parse(String(item.tags)),
+          providerVerified: Boolean(item.providerVerified),
+          ...(req.user?.id === item.providerId || req.user?.isOperator
+            ? {
+                hidden: !!hidden,
+                ownerBlocked,
+                moderationReason: hidden?.reason ?? "",
+              }
+            : {}),
+        },
+      ])[0],
     });
+  });
+  app.get("/api/listing-images/:id/:file", (req: AuthRequest, res) => {
+    const id = String(req.params.id),
+      file = String(req.params.file);
+    if (!/^[a-f0-9]{64}\.(jpg|png|webp)$/.test(file))
+      throw new HttpError(404, "Фото не найдено.");
+    const item = store.get<{
+      providerId: string;
+      photos: string;
+      visible: number;
+    }>(
+      `SELECT l.providerId,ls.photos,(${VISIBLE_LISTING_SQL}) visible FROM listing_sources ls JOIN listings l ON l.id=ls.listingId JOIN users u ON u.id=l.providerId WHERE l.id=?`,
+      id,
+    );
+    if (
+      !item ||
+      (!item.visible &&
+        !req.user?.isOperator &&
+        req.user?.id !== item.providerId) ||
+      !(JSON.parse(item.photos) as string[]).includes(
+        `/api/listing-images/${id}/${file}`,
+      )
+    )
+      throw new HttpError(404, "Фото не найдено.");
+    res.sendFile(resolve(uploadDir, "listings", file));
   });
   app.post(
     "/api/listings",
@@ -499,23 +591,37 @@ export function createApp(options: AppOptions = {}) {
       ids: store
         .all<{
           listingId: string;
-        }>("SELECT listingId FROM favorites WHERE userId=?", req.user!.id)
+        }>(
+          `SELECT f.listingId FROM favorites f JOIN listings l ON l.id=f.listingId JOIN users u ON u.id=l.providerId WHERE f.userId=? AND ${VISIBLE_LISTING_SQL}`,
+          req.user!.id,
+        )
         .map((r) => r.listingId),
-      items: store
-        .all<
-          Record<string, unknown>
-        >(`${listingsSelect} JOIN favorites f ON f.listingId=l.id WHERE f.userId=? ORDER BY l.createdAt DESC`, req.user!.id)
-        .map((l) => ({
-          ...l,
-          tags: JSON.parse(String(l.tags)),
-          providerVerified: Boolean(l.providerVerified),
-        })),
+      items: attachListingSources(
+        store,
+        store
+          .all<
+            Record<string, unknown>
+          >(`${listingsSelect} JOIN favorites f ON f.listingId=l.id WHERE f.userId=? AND ${VISIBLE_LISTING_SQL} ORDER BY l.createdAt DESC`, req.user!.id)
+          .map((l) => ({
+            ...l,
+            tags: JSON.parse(String(l.tags)),
+            providerVerified: Boolean(l.providerVerified),
+          })),
+      ),
     }),
   );
   app.put("/api/favorites/:id", requireUser, (req: AuthRequest, res) => {
     const { saved } = z.object({ saved: z.boolean() }).parse(req.body);
     if (!store.get("SELECT id FROM listings WHERE id=?", String(req.params.id)))
       throw new HttpError(404, "Предложение не найдено.");
+    if (
+      saved &&
+      !store.get(
+        `SELECT l.id FROM listings l JOIN users u ON u.id=l.providerId WHERE l.id=? AND ${VISIBLE_LISTING_SQL}`,
+        String(req.params.id),
+      )
+    )
+      throw new HttpError(404, "Предложение недоступно.");
     if (saved)
       store.run(
         "INSERT OR IGNORE INTO favorites VALUES (?,?)",
@@ -539,7 +645,10 @@ export function createApp(options: AppOptions = {}) {
         kind: z.enum(["service", "delivery"]).optional(),
       })
       .parse(req.query);
-    const where = ["r.status='open'"];
+    const where = [
+      "r.status='open'",
+      "NOT EXISTS(SELECT 1 FROM account_restrictions ar WHERE ar.userId=r.customerId)",
+    ];
     const params: string[] = [];
     if (input.city && input.city !== "Вся Черногория") {
       where.push("r.city=?");
@@ -598,7 +707,7 @@ export function createApp(options: AppOptions = {}) {
         now(),
       );
       const providers = store.all<{ id: string }>(
-        "SELECT DISTINCT u.id FROM users u JOIN listings l ON l.providerId=u.id WHERE u.role=? AND l.category=? AND (l.city=? OR ?=? OR ?=?) AND u.id<>?",
+        `SELECT DISTINCT u.id FROM users u JOIN listings l ON l.providerId=u.id WHERE u.role=? AND u.id NOT LIKE 'source-%' AND l.category=? AND (l.city=? OR ?=? OR ?=?) AND u.id<>? AND ${VISIBLE_LISTING_SQL}`,
         "provider",
         input.kind === "delivery" ? "delivery" : input.category,
         input.city,
@@ -619,11 +728,17 @@ export function createApp(options: AppOptions = {}) {
       String(req.params.id),
     );
     if (!item) throw new HttpError(404, "Заявка не найдена.");
+    if (
+      isBlocked(store, item.customerId) &&
+      req.user?.role !== "arbiter" &&
+      !req.user?.isOperator
+    )
+      throw new HttpError(404, "Заявка недоступна.");
     const canSeeAll =
       req.user?.id === item.customerId || req.user?.role === "arbiter";
     const offers = req.user
       ? store.all<Offer>(
-          `${offersSelect} WHERE o.requestId=?${canSeeAll ? "" : " AND o.providerId=?"} ORDER BY o.createdAt DESC`,
+          `${offersSelect} WHERE o.requestId=?${canSeeAll ? "" : " AND o.providerId=?"}${req.user.role === "arbiter" ? "" : " AND NOT EXISTS(SELECT 1 FROM account_restrictions ar WHERE ar.userId=o.providerId)"} ORDER BY o.createdAt DESC`,
           ...(canSeeAll ? [item.id] : [item.id, req.user.id]),
         )
       : [];
@@ -642,6 +757,11 @@ export function createApp(options: AppOptions = {}) {
         String(req.params.id),
       );
       if (!item) throw new HttpError(404, "Заявка не найдена.");
+      if (isBlocked(store, item.customerId))
+        throw new HttpError(
+          409,
+          "Автор заявки недоступен. Отклик отправить нельзя.",
+        );
       if (item.status !== "open")
         throw new HttpError(409, "По этой заявке уже выбрали исполнителя.");
       if (item.customerId === req.user!.id)
@@ -692,6 +812,11 @@ export function createApp(options: AppOptions = {}) {
       );
     const id = randomUUID();
     store.transaction(() => {
+      if (isBlocked(store, offer.providerId))
+        throw new HttpError(
+          409,
+          "Исполнитель недоступен. Выберите другой отклик.",
+        );
       const changed = store.run(
         "UPDATE requests SET status='assigned' WHERE id=? AND status='open'",
         item.id,
@@ -739,10 +864,15 @@ export function createApp(options: AppOptions = {}) {
       ),
       listings: store
         .all(
-          `${listingsSelect} WHERE l.providerId=? ORDER BY l.createdAt DESC`,
+          `SELECT l.*,u.name providerName,u.rating providerRating,u.verified providerVerified,EXISTS(SELECT 1 FROM listing_moderation lm WHERE lm.listingId=l.id) hidden,COALESCE((SELECT reason FROM listing_moderation lm WHERE lm.listingId=l.id),'') moderationReason FROM listings l JOIN users u ON u.id=l.providerId WHERE l.providerId=? ORDER BY l.createdAt DESC`,
           u.id,
         )
-        .map((l: any) => ({ ...l, tags: JSON.parse(l.tags) })),
+        .map((l: any) => ({
+          ...l,
+          tags: JSON.parse(l.tags),
+          hidden: !!l.hidden,
+          providerVerified: !!l.providerVerified,
+        })),
       incidents:
         u.role === "arbiter"
           ? store.all(
@@ -989,6 +1119,7 @@ export function createApp(options: AppOptions = {}) {
     store.run("UPDATE notifications SET read=1 WHERE userId=?", req.user!.id);
     res.json({ ok: true });
   });
+  registerOperatorRoutes(app, store, requireUser);
   app.use("/api", (_req, _res, next) =>
     next(new HttpError(404, "Маршрут не найден.")),
   );

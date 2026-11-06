@@ -55,8 +55,36 @@ export class Store {
       CREATE INDEX IF NOT EXISTS requests_filter ON requests(status,city);
       CREATE INDEX IF NOT EXISTS orders_parties ON orders(customerId,providerId);
       CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expiresAt);
-      PRAGMA user_version=1;
     `);
+    this.transaction(() =>
+      this.db.exec(`
+      CREATE TABLE IF NOT EXISTS operator_access (userId TEXT PRIMARY KEY REFERENCES users(id), createdAt TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS account_restrictions (userId TEXT PRIMARY KEY REFERENCES users(id), operatorId TEXT NOT NULL REFERENCES users(id), reason TEXT NOT NULL, createdAt TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS listing_moderation (listingId TEXT PRIMARY KEY REFERENCES listings(id), operatorId TEXT NOT NULL REFERENCES users(id), reason TEXT NOT NULL, createdAt TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS reports (
+        id TEXT PRIMARY KEY, targetType TEXT NOT NULL CHECK(targetType IN ('listing','user')), targetId TEXT NOT NULL,
+        reporterId TEXT NOT NULL REFERENCES users(id), category TEXT NOT NULL, description TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','resolved','dismissed')), resolution TEXT NOT NULL DEFAULT '',
+        resolvedBy TEXT REFERENCES users(id), createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS reports_open_unique ON reports(reporterId,targetType,targetId) WHERE status='open';
+      CREATE INDEX IF NOT EXISTS reports_queue ON reports(status,createdAt);
+      CREATE TABLE IF NOT EXISTS operator_audit (
+        id TEXT PRIMARY KEY, actorId TEXT NOT NULL REFERENCES users(id), action TEXT NOT NULL, targetType TEXT NOT NULL,
+        targetId TEXT NOT NULL, targetLabel TEXT NOT NULL, reason TEXT NOT NULL,
+        before TEXT NOT NULL, after TEXT NOT NULL, createdAt TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS operator_audit_time ON operator_audit(createdAt);
+      CREATE TABLE IF NOT EXISTS listing_sources (
+        listingId TEXT PRIMARY KEY REFERENCES listings(id) ON DELETE CASCADE,
+        channel TEXT NOT NULL, messageId INTEGER NOT NULL, authorName TEXT NOT NULL,
+        postedAt TEXT NOT NULL, importedAt TEXT NOT NULL, url TEXT NOT NULL UNIQUE,
+        priceLabel TEXT NOT NULL, priceKnown INTEGER NOT NULL, photos TEXT NOT NULL,
+        contentHash TEXT NOT NULL, UNIQUE(channel,contentHash)
+      );
+      PRAGMA user_version=3;
+    `),
+    );
   }
   all<T>(sql: string, ...params: SQLInputValue[]): T[] {
     return this.db.prepare(sql).all(...params) as T[];
@@ -106,6 +134,27 @@ export const now = () => new Date().toISOString();
 export function hashPasswordSync(password: string) {
   const salt = randomBytes(16).toString("hex");
   return `${salt}:${scryptSync(password, salt, 64).toString("hex")}`;
+}
+export function seedDemoOperator(store: Store) {
+  store.transaction(() => {
+    if (!store.get("SELECT id FROM users WHERE id='demo-operator'"))
+      store.run(
+        "INSERT INTO users (id,name,email,password,city,role,contact,createdAt) VALUES (?,?,?,?,?,?,?,?)",
+        "demo-operator",
+        "Оператор blizu",
+        "operator@demo.blizu.local",
+        hashPasswordSync("demo-blizu-2026"),
+        "Будва",
+        "customer",
+        "Демонстрационный оператор",
+        now(),
+      );
+    store.run(
+      "INSERT OR IGNORE INTO operator_access VALUES (?,?)",
+      "demo-operator",
+      now(),
+    );
+  });
 }
 export function seedDemo(store: Store) {
   if (store.get("SELECT id FROM users WHERE id=?", "demo-customer")) return;

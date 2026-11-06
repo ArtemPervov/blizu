@@ -1,0 +1,40 @@
+/* A faint water-light reflection behind the existing hero, with no layout impact. */
+.adriatic-light {
+  position: absolute;
+  inset: 40% 0 28px;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  contain: layout paint;
+  opacity: 0.8;
+  mask-image: radial-gradient(ellipse at 50% 60%, #000 35%, transparent 100%);
+}
+.adriatic-light canvas {
+  display: block;
+  pointer-events: none !important;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .adriatic-light-canvas {
+    animation: adriatic-light-arrive 1.8s ease-out both;
+  }
+  @keyframes adriatic-light-arrive {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+@media (max-width: 760px) {
+  .adriatic-light {
+    inset: 43% 0 48px;
+    opacity: 0.65;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .adriatic-light {
+    display: none;
+  }
+}

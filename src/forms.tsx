@@ -188,6 +188,7 @@ export function AuthModal({
               ["customer", "Заказчик", UserRound],
               ["provider", "Мастер", Wrench],
               ["arbiter", "Арбитр", ShieldCheck],
+              ["operator", "Оператор", BriefcaseBusiness],
             ].map(([role, name, Icon]) => {
               const I = Icon as typeof UserRound;
               return (
