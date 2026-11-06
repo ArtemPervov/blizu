@@ -51,8 +51,14 @@ const media = (query: string) => ({
   removeEventListener() {},
   dispatchEvent: () => true,
 });
-Object.defineProperty(window, "matchMedia", { value: media });
-Object.defineProperty(globalThis, "matchMedia", { value: media });
+Object.defineProperty(window, "matchMedia", {
+  value: media,
+  configurable: true,
+});
+Object.defineProperty(globalThis, "matchMedia", {
+  value: media,
+  configurable: true,
+});
 class VisibilityObserver {
   constructor(private callback: (entries: unknown[]) => void) {}
   observe(target: unknown) {
@@ -88,6 +94,8 @@ const { AuthProvider, ToastProvider, I18nProvider } = await import(
 );
 const { MarketProvider } = await import("../src/market-state");
 const { default: App } = await import("../src/App");
+const { AdriaticLight } = await import("../src/components/AdriaticLight");
+const noWebGL = HTMLCanvasElement.prototype.getContext;
 let fixture: ReturnType<typeof createApp>,
   dir: string,
   agent: ReturnType<typeof request.agent>,
@@ -135,6 +143,17 @@ beforeEach(() => {
 });
 afterEach(async () => {
   cleanup();
+  Object.defineProperty(globalThis, "matchMedia", {
+    value: media,
+    configurable: true,
+  });
+  Object.defineProperty(window, "matchMedia", {
+    value: media,
+    configurable: true,
+  });
+  HTMLCanvasElement.prototype.getContext = noWebGL;
+  Reflect.deleteProperty(navigator, "connection");
+  Reflect.deleteProperty(document, "visibilityState");
   client.clear();
   await Promise.allSettled([...inflight]);
   fixture.store.close();
@@ -164,6 +183,76 @@ async function cards() {
 function header() {
   return within(screen.getByRole("banner"));
 }
+
+test("the hero keeps a decorative contour background with reduced motion and leaves its title and search usable", async () => {
+  const { container } = mount();
+  await cards();
+  const host = container.querySelector(".adriatic-light");
+  assert.ok(host?.querySelector("svg path"));
+  assert.equal(host.getAttribute("data-renderer"), "static");
+  assert.equal(host.getAttribute("aria-hidden"), "true");
+  assert.ok(host.hasAttribute("inert"));
+  assert.ok(!host.querySelector("canvas"));
+  assert.ok(
+    screen.getByRole("heading", {
+      level: 1,
+      name: "Всё нужное. Совсем рядом.",
+    }),
+  );
+  assert.ok(screen.getByLabelText("Что вы ищете?"));
+});
+
+test("Save Data keeps the hero contours without creating a WebGL context", async () => {
+  Object.defineProperty(globalThis, "matchMedia", {
+    value: (query: string) => ({ ...media(query), matches: false }),
+    configurable: true,
+  });
+  Object.defineProperty(navigator, "connection", {
+    value: Object.assign(new window.EventTarget(), { saveData: true }),
+    configurable: true,
+  });
+  Object.defineProperty(document, "visibilityState", {
+    value: "visible",
+    configurable: true,
+  });
+  let probes = 0;
+  HTMLCanvasElement.prototype.getContext = (() => {
+    probes++;
+    return null;
+  }) as typeof noWebGL;
+  const { container } = render(<AdriaticLight />);
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  assert.ok(container.querySelector(".adriatic-light svg path"));
+  assert.equal(probes, 0);
+  assert.ok(!container.querySelector("canvas"));
+});
+
+test("unsupported WebGL 2 preserves the hero contours instead of leaving an empty background", async () => {
+  Object.defineProperty(globalThis, "matchMedia", {
+    value: (query: string) => ({ ...media(query), matches: false }),
+    configurable: true,
+  });
+  Object.defineProperty(document, "visibilityState", {
+    value: "visible",
+    configurable: true,
+  });
+  const probes: string[] = [];
+  HTMLCanvasElement.prototype.getContext = ((type: string) => {
+    probes.push(type);
+    return null;
+  }) as typeof noWebGL;
+  const { container } = render(<AdriaticLight />);
+  await waitFor(() => {
+    if (!probes.includes("webgl2"))
+      throw new Error("Waiting for the WebGL 2 capability check");
+  });
+  assert.ok(!probes.includes("webgl"));
+  assert.ok(container.querySelector(".adriatic-light svg path"));
+  assert.equal(
+    container.querySelector(".adriatic-light")?.getAttribute("data-renderer"),
+    "static",
+  );
+});
 
 test("imported Telegram ads keep provenance and ambiguous prices and link to the author instead of creating an order", async () => {
   const ads = selectTelegramAds({

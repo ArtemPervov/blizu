@@ -1,14 +1,28 @@
-/* A faint water-light reflection behind the existing hero, with no layout impact. */
+/* The light sits above the colour wash and below every interactive hero element. */
 .adriatic-light {
   position: absolute;
-  inset: 40% 0 28px;
-  z-index: -1;
+  inset: 0 -16px -10px;
+  z-index: 0;
   overflow: hidden;
   pointer-events: none;
   user-select: none;
   contain: layout paint;
-  opacity: 0.8;
-  mask-image: radial-gradient(ellipse at 50% 60%, #000 35%, transparent 100%);
+  opacity: 0.95;
+  mask-image: radial-gradient(ellipse at 50% 54%, #000 55%, transparent 100%);
+}
+.discover-intro > :not(.adriatic-light) {
+  position: relative;
+  z-index: 1;
+}
+.adriatic-light-contours {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.75;
+}
+.adriatic-light[data-renderer="webgl"] .adriatic-light-contours {
+  opacity: 0.3;
 }
 .adriatic-light canvas {
   display: block;
@@ -29,12 +43,7 @@
 }
 @media (max-width: 760px) {
   .adriatic-light {
-    inset: 43% 0 48px;
-    opacity: 0.65;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .adriatic-light {
-    display: none;
+    inset: 8px -12px -6px;
+    opacity: 0.85;
   }
 }
