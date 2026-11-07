@@ -8,7 +8,17 @@
   user-select: none;
   contain: layout paint;
   opacity: 0.95;
-  mask-image: radial-gradient(ellipse at 50% 54%, #000 55%, transparent 100%);
+}
+/* Both the waves and the colour wash must reach zero opacity at the clip edge. */
+.discover-intro::before,
+.adriatic-light {
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 12%,
+    #000 88%,
+    transparent
+  );
 }
 .discover-intro > :not(.adriatic-light) {
   position: relative;

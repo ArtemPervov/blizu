@@ -283,37 +283,53 @@ export function DiscoverPage({
         <SlidersHorizontal size={17} />
       </div>
       <form onSubmit={applyPrice}>
-        <fieldset>
-          <legend>Стоимость, €</legend>
+        <fieldset aria-label="Стоимость в евро">
+          <legend>Стоимость</legend>
           <div className="price-fields">
             <label>
-              <span>От</span>
-              <input
-                type="number"
-                aria-label="Минимальная цена"
-                min={0}
-                max={1000000}
-                value={minDraft}
-                onChange={(event) => setMinDraft(event.target.value)}
-                placeholder="0"
-              />
+              <span className="price-field-label">От</span>
+              <span className="price-field-control">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  aria-label="Минимальная цена"
+                  aria-invalid={!!priceError}
+                  min={0}
+                  max={1000000}
+                  value={minDraft}
+                  onChange={(event) => {
+                    setMinDraft(event.target.value);
+                    setPriceError("");
+                  }}
+                  placeholder="—"
+                />
+                <span aria-hidden="true">€</span>
+              </span>
             </label>
             <label>
-              <span>До</span>
-              <input
-                type="number"
-                aria-label="Максимальная цена"
-                min={0}
-                max={1000000}
-                value={maxDraft}
-                onChange={(event) => setMaxDraft(event.target.value)}
-                placeholder="Любая"
-              />
+              <span className="price-field-label">До</span>
+              <span className="price-field-control">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  aria-label="Максимальная цена"
+                  aria-invalid={!!priceError}
+                  min={0}
+                  max={1000000}
+                  value={maxDraft}
+                  onChange={(event) => {
+                    setMaxDraft(event.target.value);
+                    setPriceError("");
+                  }}
+                  placeholder="—"
+                />
+                <span aria-hidden="true">€</span>
+              </span>
             </label>
           </div>
-          <p className="filter-hint">
-            Смотрите единицу цены в карточке: услуга, час или товар.
-          </p>
+          <p className="filter-hint">Укажите одну границу цены или обе.</p>
           {priceError && (
             <p className="form-error" role="alert">
               {priceError}

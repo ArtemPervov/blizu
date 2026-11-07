@@ -453,7 +453,7 @@ test("search history and real price validation help refine or recover a search",
 
 test("mobile filter dialog applies real results and changing a city resets pagination", async () => {
   const expected = (
-    await agent.get("/api/listings?city=Бар&maxPrice=20").expect(200)
+    await agent.get("/api/listings?city=Бар&maxPrice=20.5").expect(200)
   ).body.items;
   mount("/?page=2");
   fireEvent.change(screen.getByLabelText("Город поиска"), {
@@ -464,9 +464,13 @@ test("mobile filter dialog applies real results and changing a city resets pagin
   const dialog = within(
     screen.getByRole("dialog", { name: "Фильтры предложений" }),
   );
-  fireEvent.change(dialog.getByLabelText("Максимальная цена"), {
-    target: { value: "20" },
+  const maxPrice = dialog.getByLabelText(
+    "Максимальная цена",
+  ) as HTMLInputElement;
+  fireEvent.change(maxPrice, {
+    target: { value: "20.5" },
   });
+  assert.equal(maxPrice.checkValidity(), true);
   fireEvent.click(dialog.getByRole("button", { name: "Применить фильтры" }));
   await waitFor(() => {
     if (screen.queryByRole("dialog")) throw new Error("Dialog is still open");

@@ -30,15 +30,43 @@
   border: 1px solid #e2e5dc;
   border-radius: 24px;
   background: linear-gradient(155deg, #fffefb 48%, #fafaf4);
-  box-shadow: 0 4px 14px rgb(39 57 51 / 4%);
+  box-shadow:
+    0 5px 16px rgb(39 57 51 / 5%),
+    inset 0 1px 0 #fff;
 }
 .listing-card:hover {
   transform: none;
   border-color: #c9d7cf;
-  box-shadow: 0 4px 14px rgb(39 57 51 / 4%);
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .catalog-results {
+    position: relative;
+    isolation: isolate;
+  }
+  .catalog-results::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: -1;
+    height: min(100%, 780px);
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 40% 38% at 35% 37%, #c8ddd68c, transparent 82%),
+      radial-gradient(ellipse 42% 36% at 66% 59%, #eadbc780, transparent 79%);
+  }
+  .listing-card {
+    background: linear-gradient(
+      150deg,
+      #ffffffdb 18%,
+      #faf9f0a8 70%,
+      #edf4ecbb
+    );
+    border-color: #ffffffde;
+    backdrop-filter: blur(14px) saturate(115%);
+    -webkit-backdrop-filter: blur(14px) saturate(115%);
+  }
 }
 .listing-card .listing-image {
-  --photo-inset: clamp(8px, 1vw, 14px);
   flex: none;
   width: 100%;
   height: auto;
@@ -53,6 +81,8 @@
 }
 .listing-card .listing-image img.listing-photo,
 .listing-card:hover .listing-image img.listing-photo {
+  object-fit: cover;
+  padding: 0;
   object-position: center;
   transform: none;
   filter: none;
@@ -63,7 +93,7 @@
   right: 10px;
   width: 44px;
   height: 44px;
-  background: rgb(255 255 252 / 92%);
+  background: rgb(255 255 252 / 86%);
   color: #49625c;
   border: 1px solid rgb(255 255 255 / 90%);
   border-radius: 50%;
@@ -88,7 +118,7 @@
   gap: 6px;
   border: 1px solid rgb(255 255 255 / 85%);
   border-radius: 24px;
-  background: rgb(255 255 252 / 92%);
+  background: rgb(255 255 252 / 86%);
   backdrop-filter: blur(12px);
   color: #365954;
 }

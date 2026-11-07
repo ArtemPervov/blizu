@@ -282,32 +282,64 @@ textarea:focus-visible {
 }
 .price-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 7px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  gap: 8px;
 }
 .price-fields label {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 7px 9px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
   min-width: 0;
 }
-.price-fields label > span {
-  font-size: 12px;
+.price-fields .price-field-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding-inline: 11px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+}
+.price-fields .price-field-control:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.price-fields .price-field-control > span {
+  flex-shrink: 0;
   color: var(--muted);
-  display: block;
+  font-size: 13px;
+}
+.price-fields .price-field-label {
+  color: var(--muted);
+  font-size: 13px;
 }
 .price-fields input {
+  flex: 1;
   width: 100%;
+  min-width: 0;
   border: 0;
   background: none;
-  min-height: 28px;
-  padding: 2px 0;
-  font-size: 12px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
   color: var(--ink);
+  appearance: textfield;
   -moz-appearance: textfield;
 }
-.price-fields input::-webkit-inner-spin-button {
+.price-fields input:focus-visible {
+  outline: none;
+}
+@media (forced-colors: active) {
+  .price-fields .price-field-control:focus-within {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+.price-fields input::-webkit-inner-spin-button,
+.price-fields input::-webkit-outer-spin-button {
   appearance: none;
 }
 .filter-hint {
@@ -1710,13 +1742,6 @@ textarea:focus-visible {
   .modal .filter-help {
     display: none;
   }
-  .modal .price-fields input {
-    font-size: 15px;
-    min-height: 33px;
-  }
-  .modal .price-fields label > span {
-    font-size: 12px;
-  }
   .compare-tray {
     bottom: 84px;
     max-width: calc(100% - 24px);
@@ -1834,12 +1859,6 @@ textarea:focus-visible {
   font-size: 12px;
 }
 .filter-hint {
-  font-size: 12px;
-}
-.price-fields input {
-  font-size: 14px;
-}
-.price-fields label > span {
   font-size: 12px;
 }
 .catalog-sort,
@@ -1982,7 +2001,6 @@ textarea:focus-visible {
 .filter-help p,
 .filter-help > button,
 .filter-reset,
-.price-fields label > span,
 .catalog-sort,
 .catalog-sort select,
 .listing-excerpt,
