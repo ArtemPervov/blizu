@@ -216,7 +216,7 @@ export function ListingCard({
             aria-label={`Фотографии: ${listing.title}`}
           >
             <span className="listing-photo-count">
-              <Images size={13} />
+              <Images size={12} />
               <span aria-live="polite">
                 {activeIndex + 1} / {photos.length}
               </span>
@@ -231,14 +231,14 @@ export function ListingCard({
                   )
                 }
               >
-                <ChevronLeft size={17} />
+                <ChevronLeft size={15} />
               </button>
               <button
                 type="button"
                 aria-label={`Следующее фото: ${listing.title}`}
                 onClick={() => setPhotoIndex((activeIndex + 1) % photos.length)}
               >
-                <ChevronRight size={17} />
+                <ChevronRight size={15} />
               </button>
             </div>
           </div>
@@ -251,7 +251,7 @@ export function ListingCard({
           disabled={busy}
           onClick={toggle}
         >
-          <Heart size={17} fill={saved ? "currentColor" : "none"} />
+          <Heart size={15} fill={saved ? "currentColor" : "none"} />
         </button>
       </div>
       <div className="listing-body">

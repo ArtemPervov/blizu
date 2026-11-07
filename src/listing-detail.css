@@ -70,9 +70,25 @@
   padding: clamp(9px, 1.6vw, 16px);
 }
 .listing-gallery-stage {
-  --photo-inset: clamp(10px, 2.4vw, 26px);
+  --photo-inset: clamp(4px, 1vw, 12px);
   aspect-ratio: 16 / 10;
   border-radius: 16px;
+}
+.listing-gallery-stage,
+.listing-lightbox-stage {
+  background: #edf1ee;
+  isolation: isolate;
+}
+.listing-photo-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(26px) saturate(76%);
+  transform: scale(1.14);
+  opacity: 0.54;
+  pointer-events: none;
 }
 .listing-gallery-expand {
   position: absolute;

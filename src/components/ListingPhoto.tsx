@@ -13,20 +13,35 @@ export function ListingPhoto({
   src,
   alt,
   loading = "lazy",
+  backdrop = false,
 }: {
   src: string;
   alt: string;
   loading?: "lazy" | "eager";
+  backdrop?: boolean;
 }) {
   const [failed, setFailed] = useState("");
+  const image = src === failed ? photoPlaceholder : src;
   return (
-    <img
-      className="listing-photo"
-      src={src === failed ? photoPlaceholder : src}
-      alt={alt}
-      loading={loading}
-      decoding="async"
-      onError={() => setFailed(src)}
-    />
+    <>
+      {backdrop && image !== photoPlaceholder && (
+        <img
+          className="listing-photo-backdrop"
+          src={image}
+          alt=""
+          aria-hidden="true"
+          loading={loading}
+          decoding="async"
+        />
+      )}
+      <img
+        className="listing-photo"
+        src={image}
+        alt={alt}
+        loading={loading}
+        decoding="async"
+        onError={() => setFailed(src)}
+      />
+    </>
   );
 }

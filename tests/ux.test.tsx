@@ -415,6 +415,42 @@ test("catalog applies bookmarked search, city and budget through the real API", 
   );
 });
 
+test("header city picker supports keyboard navigation, dismissal and catalogue filtering", async () => {
+  mount("/?city=Бар");
+  const trigger = await screen.findByRole("button", { name: "Ваш город: Бар" });
+  trigger.focus();
+  fireEvent.keyDown(trigger, { key: "ArrowDown" });
+  const options = within(
+    screen.getByRole("listbox", { name: "Города Черногории" }),
+  );
+  const bar = options.getByRole("option", { name: "Бар", selected: true });
+  assert.ok(document.activeElement === bar, "Selected city receives focus");
+  fireEvent.keyDown(bar, { key: "ArrowDown" });
+  const budva = options.getByRole("option", { name: "Будва" });
+  assert.ok(
+    document.activeElement === budva,
+    "Arrow moves focus to the next city",
+  );
+  fireEvent.keyDown(budva, { key: "Escape" });
+  assert.ok(!screen.queryByRole("listbox", { name: "Города Черногории" }));
+  assert.ok(
+    document.activeElement === trigger,
+    "Escape returns focus to the trigger",
+  );
+  fireEvent.click(trigger);
+  fireEvent.click(
+    within(screen.getByRole("listbox", { name: "Города Черногории" })).getByRole(
+      "option",
+      { name: "Будва" },
+    ),
+  );
+  await screen.findByRole("button", { name: "Ваш город: Будва" });
+  assert.equal(
+    (screen.getByLabelText("Город поиска") as HTMLSelectElement).value,
+    "Будва",
+  );
+});
+
 test("search history and real price validation help refine or recover a search", async () => {
   mount();
   await cards();

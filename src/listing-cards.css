@@ -103,8 +103,8 @@
 .listing-card .save-button {
   top: 10px;
   right: 10px;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   background: rgb(255 255 252 / 86%);
   color: #49625c;
   border: 1px solid rgb(255 255 255 / 90%);
@@ -135,7 +135,8 @@
   color: #365954;
 }
 .listing-photo-count {
-  padding: 7px 11px;
+  gap: 4px;
+  padding: 4px 8px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -146,12 +147,19 @@
 .listing-photo-navigation button {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border: 0;
   border-radius: 50%;
   background: transparent;
   color: inherit;
+}
+@media (pointer: coarse) {
+  .listing-card .save-button,
+  .listing-photo-navigation button {
+    width: 40px;
+    height: 40px;
+  }
 }
 .listing-photo-navigation button:hover {
   background: #e3efeb;

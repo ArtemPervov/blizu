@@ -11,13 +11,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpRight,
   Bell,
-  ChevronDown,
   Globe2,
   Heart,
   House,
   Leaf,
   LogOut,
-  MapPin,
   Menu,
   MessageCircle,
   Plus,
@@ -51,6 +49,7 @@ import { BrandSpark } from "./components/BrandIllustration";
 import { OperatorPage } from "./OperatorPage";
 import { useAvailableListings } from "./available-listings";
 import { ReportModal, type ReportTarget } from "./components/ReportButton";
+import { CityPicker } from "./components/CityPicker";
 export type CreateAction = (kind: CreateKind, preset?: CreatePreset) => void;
 
 export default function App() {
@@ -159,21 +158,7 @@ export default function App() {
             <NavLink to="/delivery">{t.delivery}</NavLink>
           </nav>
           <div className="header-actions">
-            <label className="city-control">
-              <MapPin size={15} />
-              <select
-                aria-label="Ваш город"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-              >
-                {CITIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c === "Вся Черногория" ? t.everywhere : c}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={13} />
-            </label>
+            <CityPicker city={city} onChange={setCity} />
             <label className="language-control">
               <Globe2 size={15} />
               <select

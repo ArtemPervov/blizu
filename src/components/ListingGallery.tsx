@@ -44,7 +44,7 @@ export function ListingGallery({ listing }: { listing: Listing }) {
       onKeyDown={handleKeys}
     >
       <div className="listing-photo-frame listing-gallery-stage">
-        <ListingPhoto src={photo} alt={alt} loading="eager" />
+        <ListingPhoto src={photo} alt={alt} loading="eager" backdrop />
         {photo !== photoPlaceholder && (
           <button
             className="listing-gallery-expand"
@@ -90,7 +90,7 @@ export function ListingGallery({ listing }: { listing: Listing }) {
           }}
         >
           <div className="listing-photo-frame listing-lightbox-stage">
-            <ListingPhoto src={photo} alt={alt} loading="eager" />
+            <ListingPhoto src={photo} alt={alt} loading="eager" backdrop />
           </div>
           {navigation}
         </Modal>
