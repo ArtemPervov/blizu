@@ -291,6 +291,100 @@ test("imported Telegram ads keep provenance and ambiguous prices and link to the
   assert.ok(!document.body.textContent?.includes("private-test-id"));
 });
 
+test("catalogue and detail galleries support manual photos, enlargement, and shared favorite state", async () => {
+  const ads = selectTelegramAds({
+    id: TELEGRAM_GROUP_ID,
+    type: "public_supergroup",
+    messages: [
+      {
+        id: 950,
+        type: "message",
+        date_unixtime: "1793966400",
+        from: "Автор альбома",
+        from_id: "synthetic-album-author",
+        text: "Продам письменный стол в Будве, цена 25 евро.",
+      },
+    ],
+  });
+  importTelegramAds(fixture.store, ads, dir, dir);
+  fixture.store.run(
+    "UPDATE listing_sources SET photos=? WHERE listingId=?",
+    JSON.stringify(["/images/home.jpg", "/images/food.jpg"]),
+    "tg-montenegrobye-950",
+  );
+  fixture.store.run(
+    "UPDATE listings SET image=? WHERE id=?",
+    "/images/home.jpg",
+    "tg-montenegrobye-950",
+  );
+  mount("/?source=telegram");
+  await waitFor(() => assert.equal(screen.getAllByRole("article").length, 1));
+  const article = screen.getByRole("article"),
+    card = within(article);
+  const image = article.querySelector(".listing-image img")!;
+  assert.equal(image.getAttribute("src"), "/images/home.jpg");
+  fireEvent.click(card.getByRole("button", { name: /^Следующее фото:/ }));
+  assert.equal(image.getAttribute("src"), "/images/food.jpg");
+  assert.ok(card.getByText("2 / 2"));
+  fireEvent.click(card.getByRole("button", { name: /^Предыдущее фото:/ }));
+  assert.equal(image.getAttribute("src"), "/images/home.jpg");
+  fireEvent.click(
+    card.getByRole("button", { name: "В избранное", exact: true }),
+  );
+  assert.equal(
+    card
+      .getByRole("button", { name: "Убрать из избранного" })
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  fireEvent.click(card.getByRole("button", { name: /^Сравнить:/ }));
+  assert.equal(
+    card
+      .getByRole("button", { name: /^Убрать из сравнения:/ })
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  fireEvent.error(image);
+  assert.equal(image.getAttribute("src"), "/images/telegram-placeholder.svg");
+  fireEvent.click(card.getByRole("link", { name: ads[0].title, exact: true }));
+  await screen.findByRole("heading", { level: 1, name: ads[0].title });
+  const gallery = within(
+    screen.getByRole("region", { name: "Фотографии объявления" }),
+  );
+  fireEvent.click(gallery.getByRole("button", { name: "Показать фото 2" }));
+  assert.equal(
+    gallery.getByRole("img").getAttribute("src"),
+    "/images/food.jpg",
+  );
+  fireEvent.click(gallery.getByRole("button", { name: "Увеличить фото" }));
+  const dialog = within(
+    screen.getByRole("dialog", { name: "Фотографии объявления" }),
+  );
+  assert.equal(dialog.getByRole("img").getAttribute("src"), "/images/food.jpg");
+  fireEvent.keyDown(dialog.getByRole("button", { name: "Закрыть" }), {
+    key: "ArrowLeft",
+  });
+  assert.equal(dialog.getByRole("img").getAttribute("src"), "/images/home.jpg");
+  fireEvent.click(dialog.getByRole("button", { name: "Закрыть" }));
+  assert.ok(!screen.queryByRole("dialog"));
+  assert.equal(
+    gallery.getByRole("img").getAttribute("src"),
+    "/images/home.jpg",
+  );
+  const actions = within(
+    screen.getByRole("complementary", { name: "Цена и связь с автором" }),
+  );
+  const saved = actions.getByRole("button", { name: "Убрать из избранного" });
+  assert.equal(saved.getAttribute("aria-pressed"), "true");
+  fireEvent.click(saved);
+  assert.equal(
+    actions
+      .getByRole("button", { name: "В избранное" })
+      .getAttribute("aria-pressed"),
+    "false",
+  );
+});
+
 test("catalog applies bookmarked search, city and budget through the real API", async () => {
   mount("/?q=Кондиционер&city=Бар&maxPrice=40&sort=price");
   await waitFor(() => assert.equal(screen.getAllByRole("article").length, 1));

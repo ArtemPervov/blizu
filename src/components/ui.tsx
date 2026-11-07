@@ -5,6 +5,7 @@ import {
   useRef,
   useId,
   useState,
+  type KeyboardEventHandler,
   type ReactNode,
 } from "react";
 import {
@@ -18,15 +19,19 @@ import {
   BadgeCheck,
   Columns3,
   Check,
+  ChevronLeft,
+  ChevronRight,
+  Images,
+  Send,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CATEGORIES, type Listing } from "../../shared/types";
-import { api, json, euro, useAuth, useI18n, useToast } from "../lib";
+import { euro, useI18n } from "../lib";
 const ParticleScene = lazy(() => import("./Particles"));
-import { useMarket } from "../market-state";
 import { BrandIllustration, type IllustrationKind } from "./BrandIllustration";
 import { listingAuthor, listingCity } from "../listing-format";
+import { useListingFavorite } from "../listing-favorite";
+import { ListingPhoto, listingPhotos } from "./ListingPhoto";
 
 export function Brand() {
   return (
@@ -95,10 +100,14 @@ export function Modal({
   title,
   children,
   onClose,
+  className,
+  onKeyDown,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  className?: string;
+  onKeyDown?: KeyboardEventHandler<HTMLDialogElement>;
 }) {
   const titleId = useId();
   const ref = useRef<HTMLDialogElement>(null);
@@ -114,9 +123,10 @@ export function Modal({
   }, []);
   return (
     <dialog
-      className="modal"
+      className={className ? `modal ${className}` : "modal"}
       ref={ref}
       aria-labelledby={titleId}
+      onKeyDown={onKeyDown}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
@@ -152,36 +162,19 @@ export function ListingCard({
   onCompare?: () => void;
   compared?: boolean;
 }) {
-  const market = useMarket();
   const [photoActive, setPhotoActive] = useState(false);
-  const image = listing.image || "/images/home.jpg";
-  const { user } = useAuth();
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const photos = listingPhotos(listing);
+  const activeIndex = Math.min(photoIndex, photos.length - 1);
+  const image = photos[activeIndex];
+  const author = listingAuthor(listing);
+  const initial =
+    [...author].find((character) => /[\p{L}\p{N}]/u.test(character)) ?? "·";
+  const categoryName =
+    CATEGORIES.find((category) => category.id === listing.category)?.name ||
+    "Местное предложение";
   const { t } = useI18n();
-  const toast = useToast();
-  const qc = useQueryClient();
-  const { data } = useQuery({
-    queryKey: ["favorites", user?.id],
-    queryFn: () => api<{ ids: string[] }>("/favorites"),
-    enabled: !!user,
-  });
-  const saved = user
-    ? (data?.ids.includes(listing.id) ?? false)
-    : market.saved.some((item) => item.id === listing.id);
-  const mutation = useMutation({
-    mutationFn: () =>
-      api(`/favorites/${listing.id}`, {
-        method: "PUT",
-        body: json({ saved: !saved }),
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["favorites"] });
-      toast(
-        saved ? "Убрали из избранного" : "Сохранили в избранное",
-        "success",
-      );
-    },
-    onError: (e) => toast(e.message, "error"),
-  });
+  const { saved, busy, toggle } = useListingFavorite(listing);
   return (
     <article
       className={`listing-card${immersive ? " listing-card--immersive" : ""}`}
@@ -195,7 +188,7 @@ export function ListingCard({
       }}
     >
       <div
-        className={`listing-image${photoActive ? " listing-image--active" : ""}`}
+        className={`listing-image listing-photo-frame${photoActive ? " listing-image--active" : ""}`}
         onPointerEnter={(event) => {
           if (immersive && event.pointerType === "mouse") setPhotoActive(true);
         }}
@@ -209,44 +202,69 @@ export function ListingCard({
         }}
       >
         <Link to={`/listings/${listing.id}`} tabIndex={-1} aria-hidden="true">
-          <img src={image} alt="" loading="lazy" />
+          <ListingPhoto src={image} alt="" />
         </Link>
         {immersive && photoActive && (
           <Suspense fallback={null}>
             <ParticleScene variant="photo" imageUrl={image} />
           </Suspense>
         )}
-        <span className="image-tag">
-          {CATEGORIES.find((category) => category.id === listing.category)
-            ?.name || "Местное предложение"}
-        </span>
+        {photos.length > 1 && (
+          <div
+            className="listing-photo-navigation"
+            role="group"
+            aria-label={`Фотографии: ${listing.title}`}
+          >
+            <span className="listing-photo-count">
+              <Images size={13} />
+              <span aria-live="polite">
+                {activeIndex + 1} / {photos.length}
+              </span>
+            </span>
+            <div>
+              <button
+                type="button"
+                aria-label={`Предыдущее фото: ${listing.title}`}
+                onClick={() =>
+                  setPhotoIndex(
+                    (activeIndex - 1 + photos.length) % photos.length,
+                  )
+                }
+              >
+                <ChevronLeft size={17} />
+              </button>
+              <button
+                type="button"
+                aria-label={`Следующее фото: ${listing.title}`}
+                onClick={() => setPhotoIndex((activeIndex + 1) % photos.length)}
+              >
+                <ChevronRight size={17} />
+              </button>
+            </div>
+          </div>
+        )}
         <button
           className={`save-button ${saved ? "saved" : ""}`}
           aria-label={saved ? "Убрать из избранного" : "В избранное"}
           aria-pressed={saved}
-          aria-busy={mutation.isPending}
-          disabled={mutation.isPending}
-          onClick={() => {
-            if (!user) {
-              market.toggleSaved(listing);
-              toast(
-                saved ? "Убрали из избранного" : "Сохранено на этом устройстве",
-                "success",
-              );
-              return;
-            }
-            mutation.mutate();
-          }}
+          aria-busy={busy}
+          disabled={busy}
+          onClick={toggle}
         >
           <Heart size={17} fill={saved ? "currentColor" : "none"} />
         </button>
       </div>
       <div className="listing-body">
-        <div className="listing-location">
-          <MapPin size={12} />
-          {listingCity(listing)}
-          {listing.hidden && (
-            <span className="listing-moderation-label">Скрыто оператором</span>
+        <div className="listing-eyebrow">
+          <span className="listing-category">{categoryName}</span>
+          {listing.source && (
+            <span className="listing-source-label">
+              <Send size={12} />
+              Telegram
+            </span>
+          )}
+          {!listing.source && listing.providerId.startsWith("demo-") && (
+            <span className="listing-demo-label">Демо</span>
           )}
         </div>
         <h3 className="listing-heading">
@@ -268,22 +286,33 @@ export function ListingCard({
               </>
             )}
           </div>
-          <Link
-            className="card-arrow"
-            aria-label={`${t.details}: ${listing.title}`}
-            to={`/listings/${listing.id}`}
-          >
-            <ArrowUpRight size={19} />
-          </Link>
         </div>
         <p className="listing-excerpt">{listing.description}</p>
+        <div className="listing-location">
+          <span>
+            <MapPin size={13} />
+            {listingCity(listing)}
+          </span>
+          {listing.source && (
+            <time
+              dateTime={listing.source.postedAt}
+              title={new Intl.DateTimeFormat("ru-RU", {
+                dateStyle: "long",
+              }).format(new Date(listing.source.postedAt))}
+            >
+              {new Intl.DateTimeFormat("ru-RU", {
+                day: "numeric",
+                month: "short",
+              }).format(new Date(listing.source.postedAt))}
+            </time>
+          )}
+        </div>
+        {listing.hidden && (
+          <span className="listing-moderation-label">Скрыто оператором</span>
+        )}
         <div className="provider-line">
-          <span className="mini-avatar">
-            {listingAuthor(listing).slice(0, 1)}
-          </span>
-          <span className="listing-provider-name">
-            {listingAuthor(listing)}
-          </span>
+          <span className="mini-avatar">{initial}</span>
+          <span className="listing-provider-name">{author}</span>
           {!listing.source && listing.providerVerified && (
             <BadgeCheck
               size={14}
@@ -291,9 +320,7 @@ export function ListingCard({
               aria-label="Профиль с отметкой"
             />
           )}
-          {listing.source ? (
-            <span className="source-card-badge">Telegram</span>
-          ) : (
+          {!listing.source && listing.reviewCount > 0 && (
             <span
               className="listing-provider-rating"
               aria-label={`Рейтинг ${listing.providerRating.toFixed(1)}, отзывов: ${listing.reviewCount}`}
@@ -303,19 +330,32 @@ export function ListingCard({
               <span>({listing.reviewCount})</span>
             </span>
           )}
+          {!listing.source && listing.reviewCount === 0 && (
+            <span className="listing-no-reviews">Без отзывов</span>
+          )}
         </div>
       </div>
-      {onCompare && (
-        <button
-          className={`compare-choice ${compared ? "is-selected" : ""}`}
-          aria-pressed={compared}
-          onClick={onCompare}
-          aria-label={`${compared ? "Убрать из сравнения" : "Сравнить"}: ${listing.title}`}
+      <div className="listing-card-actions">
+        <Link
+          className="listing-open"
+          aria-label={`${t.details}: ${listing.title}`}
+          to={`/listings/${listing.id}`}
         >
-          {compared ? <Check size={15} /> : <Columns3 size={15} />}{" "}
-          {compared ? "В сравнении" : "Сравнить"}
-        </button>
-      )}
+          {t.details}
+          <ArrowUpRight size={16} />
+        </Link>
+        {onCompare && (
+          <button
+            className={`compare-choice ${compared ? "is-selected" : ""}`}
+            aria-pressed={compared}
+            onClick={onCompare}
+            aria-label={`${compared ? "Убрать из сравнения" : "Сравнить"}: ${listing.title}`}
+          >
+            {compared ? <Check size={15} /> : <Columns3 size={15} />}{" "}
+            {compared ? "Выбрано" : "Сравнить"}
+          </button>
+        )}
+      </div>
     </article>
   );
 }

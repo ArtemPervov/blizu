@@ -11,6 +11,8 @@ import "./operator.css";
 import "./adriatic-light.css";
 import "./controls.css";
 import "./telegram.css";
+import "./listing-cards.css";
+import "./listing-detail.css";
 import { MarketProvider } from "./market-state";
 const queryClient = new QueryClient({
   defaultOptions: {

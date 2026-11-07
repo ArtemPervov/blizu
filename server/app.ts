@@ -436,7 +436,7 @@ export function createApp(options: AppOptions = {}) {
     }
     if (input.q) {
       where.push(
-        "instr(casefold(l.title || ' ' || l.description || ' ' || u.name),?)>0",
+        "instr(casefold(l.title || ' ' || l.description || ' ' || u.name || ' ' || COALESCE((SELECT ls.authorName FROM listing_sources ls WHERE ls.listingId=l.id),'')),?)>0",
       );
       params.push(input.q.toLocaleLowerCase("ru"));
     }
@@ -471,7 +471,9 @@ export function createApp(options: AppOptions = {}) {
           ? "EXISTS(SELECT 1 FROM listing_sources ls WHERE ls.listingId=l.id AND ls.priceKnown=0) ASC,l.price DESC,l.id ASC"
           : input.sort === "newest"
             ? "l.createdAt DESC,COALESCE((SELECT ls.messageId FROM listing_sources ls WHERE ls.listingId=l.id),0) DESC,l.id ASC"
-            : "u.rating DESC,l.reviewCount DESC,l.id ASC";
+            : input.sort === "rating"
+              ? "u.rating DESC,l.reviewCount DESC,l.id ASC"
+              : `${demo ? "CASE WHEN u.id LIKE 'demo-%' THEN 1 ELSE 0 END ASC," : ""}u.rating DESC,l.reviewCount DESC,l.createdAt DESC,l.id ASC`;
     let items: Record<string, unknown>[] = store
       .all<
         Record<string, unknown>

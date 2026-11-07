@@ -46,6 +46,7 @@ const cityPatterns: [string, RegExp][] = [
   ["Херцег-Нови", /херцег[\s-]*нов|herceg[\s-]*nov/iu],
   ["Подгорица", /подгориц|podgoric/iu],
   ["Бечичи", /бечич|becic|bečić/iu],
+  ["Петровац", /петровац|petrovac/iu],
   ["Будва", /будв|budv/iu],
   ["Тиват", /тиват|tivat/iu],
   ["Котор", /(?:^|[^\p{L}])котор(?:[аеу])?(?:$|[^\p{L}])|\bkotor\b/iu],
@@ -56,30 +57,58 @@ const cityPatterns: [string, RegExp][] = [
   ["Никшич", /никшич|nikši|niksi/iu],
 ];
 function categoryOf(text: string) {
-  if (/доставк|посылк|перевоз.*груз|карго/iu.test(text)) return "delivery";
+  const headline = titleOf(text).split(/(?<=[.!?])\s+/)[0];
   if (
-    /бров|маникюр|педикюр|ресниц|массаж|стрижк|косметолог|эпиляц/iu.test(text)
+    /автомобил|автокресл|электроскутер|электросамокат|велосипед|мотоцикл|трансфер|такси|визаран|автошин|\b(?:volkswagen|golf|audi|bmw|toyota|mercedes|citycoco)\b/iu.test(
+      headline,
+    )
+  )
+    return "auto";
+  if (
+    /психолог|психотерап|парикмахер|бров|маникюр|педикюр|ресниц|массаж|стрижк|косметолог|эпиляц/iu.test(
+      headline,
+    )
   )
     return "beauty";
   if (
-    /ремонт|сантехник|электрик|монтаж|уборк|клининг|мастер на час/iu.test(text)
+    /домашн.*(?:торт|ед|кухн|масл)|оливков.*масл|выпечк|пельмен.*заказ/iu.test(
+      headline,
+    )
+  )
+    return "food";
+  if (/гравиров|3[дd].*печат|3[дd][ -]*принтер.*заказ/iu.test(headline))
+    return "business";
+  // Product descriptions often mention delivery, repairs or documents as details.
+  if (/прода[мюеё]|продажа|куплю|отда[мюеё]/iu.test(headline)) return "goods";
+  if (/доставк|доставля|доставлю|посылк|перевоз.*груз|карго/iu.test(headline))
+    return "delivery";
+  if (
+    /бров|маникюр|педикюр|ресниц|массаж|стрижк|косметолог|эпиляц/iu.test(
+      headline,
+    )
+  )
+    return "beauty";
+  if (
+    /ремонт|сантехник|электрик|монтаж|уборк|клининг|мастер на час/iu.test(
+      headline,
+    )
   )
     return "repair";
   if (
     /домашн.*(?:торт|ед|кухн)|торт.*заказ|выпечк|обед.*достав|пельмен.*заказ/iu.test(
-      text,
+      headline,
     )
   )
     return "food";
   if (
     /консульств|боравак|бухгалтер|юрист|документ|переводчик|регистрац.*фирм/iu.test(
-      text,
+      headline,
     )
   )
     return "business";
   if (
     /автомобил|машин[ауы].*(?:прод|аренд)|трансфер|пассажир|такси|визаран|автошин|резин.*(?:r\d|зимн)/iu.test(
-      text,
+      headline,
     )
   )
     return "auto";
@@ -88,17 +117,20 @@ function categoryOf(text: string) {
 export function adPrice(text: string) {
   const amounts = [
     ...text.matchAll(
-      /(?<![\d.,])([\d]{1,6}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?)\s*(?:€|евро|eur\b)/giu,
+      /(?<![\d.,])([\d]{1,6}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?)\s*(?:€|евро|euro?\b)|€\s*([\d]{1,6}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?)(?!\d|[.,]\d)/giu,
     ),
   ]
     .map((match) =>
-      Number(match[1].replace(/[ \u00a0]/g, "").replace(",", ".")),
+      Number(
+        (match[1] ?? match[2]).replace(/[ \u00a0]/g, "").replace(",", "."),
+      ),
     )
     .filter((amount) => amount > 0 && amount <= 1000000);
   const unique = [...new Set(amounts)];
-  const otherCurrency = /(?:руб(?:лей|ля|ль)?|₽|\$|usd|доллар|динар)/iu.test(
-    text,
-  );
+  const otherCurrency =
+    /(?<![\p{L}])(?:руб(?:лей|ля|ль)?|usd|доллар(?:ов|а)?|динар(?:ов|а)?)(?![\p{L}])|₽|\$/iu.test(
+      text,
+    );
   if (
     !unique.length &&
     !otherCurrency &&
@@ -150,6 +182,7 @@ function isAd(text: string, hasPhoto: boolean) {
 function titleOf(text: string) {
   const lines = text
     .split(/\n+/)
+    .filter((line) => !/^\s*(?:#[^\s#]+\s*)+$/.test(line))
     .map((line) =>
       line
         .replace(/^[^\p{L}\p{N}]+/u, "")
@@ -157,8 +190,16 @@ function titleOf(text: string) {
         .trim(),
     )
     .filter(Boolean);
+  const meaningful = lines.filter(
+    (line) =>
+      !/^(?:всем (?:привет|добра)|доброго времени суток|добрый день|здравствуйте|срочная продажа|продам в связи с переездом|в связи с переездом продам|продам\s*\(в наличии \d+\s*шт\.\)|петровац и др\. города\. оплата возможна в разной валюте|central point\))[\s.!:]*$/iu.test(
+        line,
+      ),
+  );
   const line =
-    lines.find((item) => item.length >= 12 && !/^https?:\/\//i.test(item)) ??
+    meaningful.find(
+      (item) => item.length >= 12 && !/^https?:\/\//i.test(item),
+    ) ??
     lines[0] ??
     "Объявление из Telegram";
   return line.length <= 100
@@ -231,14 +272,20 @@ export function selectTelegramAds(
     seen = new Set<string>();
   for (const group of groups.reverse()) {
     if (!isAd(group.text, group.photos.length > 0)) continue;
-    const normalized = group.text
+    const withoutPrices = group.text.replace(
+      /(?:€\s*)?\d+(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?\s*(?:€|евро|euro?\b)|€\s*\d+(?:[.,]\d{1,2})?/giu,
+      " [price] ",
+    );
+    const normalized = (group.text.length >= 100 ? withoutPrices : group.text)
       .toLocaleLowerCase("ru")
       .replace(/[^\p{L}\p{N}]/gu, "");
     const key =
       normalized.length < 60
         ? `${normalized}|${group.photos[0] ?? ""}`
         : normalized;
-    const contentHash = createHash("sha256").update(key).digest("hex");
+    const contentHash = createHash("sha256")
+      .update(`${group.anchor.from_id ?? group.anchor.from ?? ""}|${key}`)
+      .digest("hex");
     if (seen.has(contentHash)) continue;
     seen.add(contentHash);
     const cities = cityPatterns.filter(([, pattern]) =>

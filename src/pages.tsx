@@ -14,6 +14,7 @@ import {
   EyeOff,
   FileImage,
   Handshake,
+  Heart,
   MapPin,
   MessageCircle,
   Package,
@@ -51,7 +52,8 @@ import { BrandIllustration } from "./components/BrandIllustration";
 import { getOrderAction } from "./order-state";
 import { ReportButton, type ReportTarget } from "./components/ReportButton";
 import { ListingGallery } from "./components/ListingGallery";
-import { listingAuthor, listingCity, listingPrice } from "./listing-format";
+import { listingAuthor, listingCity } from "./listing-format";
+import { useListingFavorite } from "./listing-favorite";
 
 function LoginRequired({ onLogin }: { onLogin: () => void }) {
   return (
@@ -533,164 +535,207 @@ export function ListingPage({
         <ErrorState error={error} retry={refetch} />
       </div>
     );
-  const l = data.item;
+  return <ListingDetail listing={data.item} create={create} report={report} />;
+}
+
+function ListingDetail({
+  listing,
+  create,
+  report,
+}: {
+  listing: Listing;
+  create: CreateAction;
+  report: (target: ReportTarget) => void;
+}) {
+  const { user } = useAuth();
+  const favorite = useListingFavorite(listing);
+  const source = listing.source;
+  const author = listingAuthor(listing);
+  const category = CATEGORIES.find(
+    (item) => item.id === listing.category,
+  )?.name;
+  const tags = listing.tags.filter((tag) => !source || tag !== "Из Telegram");
   return (
-    <div className="page-shell">
-      <Link className="back-link" to="/">
-        <ArrowLeft size={16} />
-        Все предложения
+    <div className="page-shell listing-detail-page">
+      <Link className="back-link listing-detail-back" to="/">
+        <ArrowLeft size={16} /> Все предложения
       </Link>
-      <div className="detail-layout">
-        <div>
-          <ListingGallery key={l.id} listing={l} />
-          <h1 className="detail-title">{l.title}</h1>
-          {l.hidden && (
-            <p className="listing-moderation-notice">
-              <EyeOff size={17} />
-              Скрыто оператором: {l.moderationReason}
-            </p>
-          )}
-          {l.ownerBlocked && (
-            <p className="listing-moderation-notice">
-              Автор заблокирован. Предложение недоступно в каталоге.
-            </p>
-          )}
-          <div className="detail-meta">
-            <span>
-              <MapPin size={15} />
-              {listingCity(l)}
+      <header className="listing-detail-heading">
+        <p className="listing-detail-kicker">
+          {category ?? "Местное предложение"}
+        </p>
+        <h1>{listing.title}</h1>
+        <div className="listing-detail-meta">
+          <span>
+            <MapPin size={15} />
+            {listingCity(listing)}
+          </span>
+          {source ? (
+            <span className="listing-detail-source">
+              <Send size={14} />
+              Telegram
             </span>
-            {l.source ? (
+          ) : (
+            listing.reviewCount > 0 && (
               <span>
-                <Send size={14} />
-                Из Telegram · {date(l.source.postedAt)}
-              </span>
-            ) : (
-              <span className="rating">
                 <Star size={14} fill="currentColor" />
-                {l.providerRating.toFixed(1)}{" "}
-                <span>· {l.reviewCount} оценок</span>
+                {listing.providerRating.toFixed(1)} · {listing.reviewCount}{" "}
+                оценок
               </span>
+            )
+          )}
+          <time dateTime={listing.createdAt}>
+            <Clock3 size={14} />
+            {date(listing.createdAt)}
+          </time>
+        </div>
+      </header>
+      {listing.hidden && (
+        <p className="listing-moderation-notice">
+          <EyeOff size={17} />
+          Скрыто оператором: {listing.moderationReason}
+        </p>
+      )}
+      {listing.ownerBlocked && (
+        <p className="listing-moderation-notice">
+          Автор заблокирован. Предложение недоступно в каталоге.
+        </p>
+      )}
+      <div className="listing-detail-layout">
+        <ListingGallery key={listing.id} listing={listing} />
+        <aside
+          className="listing-detail-panel"
+          aria-label="Цена и связь с автором"
+        >
+          <p className="listing-detail-price-label">
+            {source ? "Условия автора" : "Стоимость от"}
+          </p>
+          <p
+            className={
+              source && !source.priceKnown
+                ? "listing-detail-price is-text"
+                : "listing-detail-price"
+            }
+          >
+            {source ? source.priceLabel : euro(listing.price)}
+            {!source && <small> / {listing.unit}</small>}
+          </p>
+          <div className="listing-detail-actions">
+            {source ? (
+              <a
+                className="button primary full"
+                href={source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Открыть в Telegram <ExternalLink size={17} />
+              </a>
+            ) : (
+              <button
+                className="button primary full"
+                onClick={() => create("request", listing)}
+              >
+                Создать заявку <ArrowUpRight size={18} />
+              </button>
+            )}
+            {!listing.hidden && !listing.ownerBlocked && (
+              <button
+                className="button secondary full listing-detail-save"
+                type="button"
+                aria-pressed={favorite.saved}
+                aria-label={
+                  favorite.saved ? "Убрать из избранного" : "В избранное"
+                }
+                aria-busy={favorite.busy}
+                disabled={favorite.busy}
+                onClick={favorite.toggle}
+              >
+                <Heart
+                  size={17}
+                  fill={favorite.saved ? "currentColor" : "none"}
+                />
+                {favorite.saved ? "В избранном" : "В избранное"}
+              </button>
             )}
           </div>
-          <section className="content-card">
-            <h2>{l.source ? "Описание объявления" : "Чем могу помочь"}</h2>
-            <p className="preserve-lines">{l.description}</p>
+          <div className="listing-detail-author">
+            <span className="listing-detail-avatar" aria-hidden="true">
+              {[...author].find((character) =>
+                /[\p{L}\p{N}]/u.test(character),
+              ) ?? "·"}
+            </span>
+            <div>
+              <strong>
+                {author}
+                {!source && listing.providerVerified && (
+                  <BadgeCheck
+                    size={17}
+                    className="green"
+                    aria-label="Профиль с отметкой"
+                  />
+                )}
+              </strong>
+              <span>
+                {source ? "Автор объявления в Telegram" : "Местный исполнитель"}
+              </span>
+            </div>
+          </div>
+          <p className="listing-detail-hint">
+            {source
+              ? "Наличие и условия можно уточнить у автора в оригинальной публикации."
+              : "Исполнители пришлют отклики на заявку. Контакты откроются после выбора исполнителя."}
+          </p>
+          {!source && (
+            <ReportButton
+              targetType="user"
+              targetId={listing.providerId}
+              targetLabel={listing.providerName}
+              ownerId={listing.providerId}
+              onReport={report}
+            />
+          )}
+        </aside>
+        <section className="listing-detail-description">
+          <h2>{source ? "Описание объявления" : "Чем могу помочь"}</h2>
+          <p className="preserve-lines">{listing.description}</p>
+          {!!tags.length && (
             <div className="tag-list">
-              {l.tags.map((tag) => (
+              {tags.map((tag) => (
                 <span key={tag}>{tag}</span>
               ))}
             </div>
-          </section>
-          {l.source && (
-            <div className="source-attribution">
-              <Send size={19} />
+          )}
+          {source && (
+            <div className="listing-detail-provenance">
+              <Send size={17} />
               <div>
-                <strong>Из @{l.source.channel}</strong>
-                <p>
-                  Копия объявления от {date(l.source.postedAt)}. Наличие, цену и
-                  условия уточните у автора в Telegram.
-                </p>
-                <a
-                  href={l.source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <span>Публикация в @{source.channel}</span>
+                <a href={source.url} target="_blank" rel="noopener noreferrer">
                   Оригинал объявления <ExternalLink size={13} />
                 </a>
               </div>
             </div>
           )}
-          <ReportButton
-            targetType="listing"
-            targetId={l.id}
-            targetLabel={l.title}
-            ownerId={l.providerId}
-            onReport={report}
-          />
-          {user?.isOperator && (
-            <Link
-              className="quiet-link"
-              to={`/operator?tab=listings&q=${encodeURIComponent(l.id)}`}
-            >
-              Модерация предложения
-              <ArrowUpRight size={15} />
-            </Link>
-          )}
-        </div>
-        <aside className="sticky-aside">
-          <div className="content-card provider-card">
-            <span className="large-avatar">{listingAuthor(l)[0]}</span>
-            <h2>
-              {listingAuthor(l)}
-              {!l.source && l.providerVerified && (
-                <BadgeCheck size={20} className="green" />
-              )}
-            </h2>
-            <span className="muted small">
-              {l.source
-                ? "Автор объявления в Telegram"
-                : `Местный исполнитель · ${l.city}`}
-            </span>
-            {!l.source && (
-              <ReportButton
-                targetType="user"
-                targetId={l.providerId}
-                targetLabel={l.providerName}
-                ownerId={l.providerId}
-                onReport={report}
-              />
-            )}
-            <div className="price-divider" />
-            <span className="muted small">
-              {l.source ? "Условия автора" : "Стоимость от"}
-            </span>
-            <div className="big-price">
-              {l.source ? (
-                <span className="source-detail-price">{listingPrice(l)}</span>
-              ) : (
-                <>
-                  {euro(l.price)} <span>/ {l.unit}</span>
-                </>
-              )}
-            </div>
-            {l.source ? (
-              <>
-                <a
-                  className="button primary full"
-                  href={l.source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Открыть в Telegram <ExternalLink size={17} />
-                </a>
-                <p className="muted small">
-                  Договориться с автором можно в оригинальном объявлении. Заказ
-                  и переписка на blizu для этой карточки недоступны.
-                </p>
-              </>
-            ) : (
-              <>
-                <button
-                  className="button primary full"
-                  onClick={() => create("request", l)}
-                >
-                  Создать заявку
-                  <ArrowUpRight size={18} />
-                </button>
-                <p className="muted small">
-                  Создадим заявку на площадке по этому предложению. Исполнители
-                  смогут прислать отклики — вы сравните условия и выберете
-                  подходящего.
-                </p>
-                <div className="form-note">
-                  <ShieldCheck size={21} />
-                  <p>Контакты открываются в заказе после выбора исполнителя.</p>
-                </div>
-              </>
+          <div className="listing-detail-support">
+            <ReportButton
+              targetType="listing"
+              targetId={listing.id}
+              targetLabel={listing.title}
+              ownerId={listing.providerId}
+              onReport={report}
+            />
+            {user?.isOperator && (
+              <Link
+                className="quiet-link"
+                to={
+                  "/operator?tab=listings&q=" + encodeURIComponent(listing.id)
+                }
+              >
+                Модерация предложения <ArrowUpRight size={15} />
+              </Link>
             )}
           </div>
-        </aside>
+        </section>
       </div>
     </div>
   );

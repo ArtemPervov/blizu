@@ -159,9 +159,11 @@ async function main() {
     );
   const exportDir = resolve(args[exportAt + 1]),
     file = resolve(exportDir, "result.json");
-  if (!existsSync(file))
+  const htmlFile = resolve(exportDir, "messages.html");
+  const format = existsSync(file) ? "json" : "html";
+  if (!existsSync(file) && !existsSync(htmlFile))
     throw new Error(
-      "В папке нет result.json. Выберите JSON-экспорт Telegram Desktop и дождитесь его окончания.",
+      "В папке нет result.json или messages.html. Выберите папку экспорта Telegram Desktop.",
     );
   const apply = args.includes("--apply"),
     watch = args.includes("--wait");
@@ -169,22 +171,27 @@ async function main() {
   let data: TelegramExport | undefined;
   let lastLog = 0;
   while (!data) {
-    const before = statSync(file);
+    const before = statSync(format === "json" ? file : htmlFile);
     try {
-      const parsed = JSON.parse(readFileSync(file, "utf8")) as TelegramExport;
-      const after = statSync(file);
-      if (before.size !== after.size || before.mtimeMs !== after.mtimeMs)
-        throw new SyntaxError("Export is changing");
-      data = parsed;
+      if (format === "html") {
+        const { readTelegramHtml } = await import("./telegram-html.js");
+        data = readTelegramHtml(exportDir);
+      } else {
+        const parsed = JSON.parse(readFileSync(file, "utf8")) as TelegramExport;
+        const after = statSync(file);
+        if (before.size !== after.size || before.mtimeMs !== after.mtimeMs)
+          throw new SyntaxError("Export is changing");
+        data = parsed;
+      }
     } catch (error) {
       if (!(error instanceof SyntaxError)) throw error;
       if (!watch || Date.now() >= deadline)
         throw new Error(
-          "Экспорт ещё не завершён или JSON повреждён. Дождитесь окончания экспорта в Telegram Desktop.",
+          "Экспорт ещё не завершён или повреждён. Дождитесь окончания экспорта в Telegram Desktop.",
         );
       if (Date.now() - lastLog > 60_000) {
         console.log(
-          `${now()} — ожидаем завершения result.json (${before.size} байт).`,
+          `${now()} — ожидаем завершения ${format.toUpperCase()}-экспорта.`,
         );
         lastLog = Date.now();
       }
@@ -200,7 +207,17 @@ async function main() {
   const report = resolve(".context", "telegram-import-report.json");
   writeFileSync(
     report,
-    JSON.stringify({ generatedAt: now(), exportDir, ads }, null, 2),
+    JSON.stringify(
+      {
+        generatedAt: now(),
+        exportDir,
+        format,
+        messages: data.messages.length,
+        ads,
+      },
+      null,
+      2,
+    ),
   );
   console.log(
     JSON.stringify({
