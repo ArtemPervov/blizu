@@ -9,6 +9,7 @@ import {
 } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowLeft,
   ArrowUpRight,
   Bell,
   Globe2,
@@ -537,6 +538,12 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
   const items = user ? ids.data?.items : guestSaved.items;
   return (
     <div className="page-shell">
+      {user && (
+        <Link className="back-link" to="/dashboard">
+          <ArrowLeft size={16} aria-hidden="true" />
+          В личный кабинет
+        </Link>
+      )}
       <div className="page-heading">
         <span className="section-kicker">ТО, ЧТО ПОНРАВИЛОСЬ</span>
         <h1>

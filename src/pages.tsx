@@ -183,26 +183,32 @@ export function RequestsPage({
             </button>
           ))}
         </div>
-        <select
-          aria-label="Категория заявок"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
+        <div
+          className="filter-bar-selects"
+          role="group"
+          aria-label="Фильтры заявок"
         >
-          {CATEGORIES.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Город заявок"
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-        >
-          {CITIES.map((c) => (
-            <option key={c}>{c}</option>
-          ))}
-        </select>
+          <select
+            aria-label="Категория заявок"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Город заявок"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+          >
+            {CITIES.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+        </div>
       </div>
       <div className="two-column-page">
         <section className="request-list">

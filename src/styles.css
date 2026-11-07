@@ -1728,11 +1728,18 @@ main {
 .filter-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 20px;
   margin: 28px 0;
 }
-.filter-bar > select {
-  margin-left: auto;
+.filter-bar-selects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 100%;
+}
+.filter-bar-selects > select {
+  max-width: 100%;
   min-height: 38px;
   border: 1px solid var(--border);
   background: #fff;
@@ -3498,13 +3505,15 @@ main {
     font-size: 11px;
   }
   .filter-bar {
-    flex-wrap: wrap;
     gap: 13px;
     margin: 23px 0;
   }
-  .filter-bar > select {
-    margin-left: 0;
-    flex: 1;
+  .filter-bar-selects {
+    width: 100%;
+  }
+  .filter-bar-selects > select {
+    flex: 1 1 124px;
+    min-width: 0;
   }
   .filter-bar > .small {
     font-size: 9px;
@@ -3944,7 +3953,7 @@ main {
 .request-card-content > p,
 .request-card-footer > span:last-child,
 .request-price > span,
-.filter-bar > select,
+.filter-bar-selects > select,
 .field > small,
 .timeline-item p,
 .contact-block div > span,

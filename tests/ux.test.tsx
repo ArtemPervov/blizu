@@ -900,6 +900,22 @@ test("personal workspace links to the order list and preserves provider-only lis
   );
 });
 
+test("signed-in users can return to their workspace from favorites", async () => {
+  await agent.post("/api/auth/demo").send({ role: "customer" }).expect(200);
+  mount("/dashboard");
+  const workspace = within(
+    await screen.findByRole("navigation", { name: "Личное пространство" }),
+  );
+  fireEvent.click(workspace.getByRole("link", { name: "Избранное" }));
+  await screen.findByRole("heading", { level: 1, name: /^Избранное/ });
+  const back = screen.getByRole("link", {
+    name: "В личный кабинет",
+    exact: true,
+  });
+  fireEvent.click(back);
+  await screen.findByRole("navigation", { name: "Личное пространство" });
+});
+
 test("private orders require sign-in and arbiter workspace exposes disputes", async () => {
   mount("/orders");
   assert.ok(await screen.findByRole("button", { name: "Войти в аккаунт" }));
