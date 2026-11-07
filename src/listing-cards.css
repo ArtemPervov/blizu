@@ -28,6 +28,7 @@
   flex-direction: column;
   padding: 11px 11px 0;
   border: 1px solid #e2e5dc;
+  border-top-color: #fff;
   border-radius: 24px;
   background: linear-gradient(155deg, #fffefb 48%, #fafaf4);
   box-shadow:
@@ -55,15 +56,26 @@
       radial-gradient(ellipse 42% 36% at 66% 59%, #eadbc780, transparent 79%);
   }
   .listing-card {
-    background: linear-gradient(
-      150deg,
-      #ffffffdb 18%,
-      #faf9f0a8 70%,
-      #edf4ecbb
-    );
-    border-color: #ffffffde;
-    backdrop-filter: blur(14px) saturate(115%);
-    -webkit-backdrop-filter: blur(14px) saturate(115%);
+    background:
+      var(--glass-fill),
+      radial-gradient(ellipse at 95% 92%, #b8d5cb55, transparent 72%);
+    border-color: #fff #dce8dfd9 #d4e1d8c9 #ffffffed;
+    box-shadow: var(--glass-depth);
+    backdrop-filter: blur(14px) saturate(118%);
+    -webkit-backdrop-filter: blur(14px) saturate(118%);
+  }
+  .listing-card
+    :is(
+      .save-button:not(.saved),
+      .listing-photo-count,
+      .listing-photo-navigation > div
+    ) {
+    background: linear-gradient(145deg, #ffffffe8, #edf5efd2);
+    box-shadow:
+      0 2px 8px #234d4320,
+      inset 0 1px 0 #fff;
+    backdrop-filter: blur(16px) saturate(110%);
+    -webkit-backdrop-filter: blur(16px) saturate(110%);
   }
 }
 .listing-card .listing-image {
@@ -176,12 +188,12 @@
   white-space: nowrap;
 }
 .listing-demo-label {
-  color: #7b766c;
+  color: #626d63;
   font-size: 12px;
 }
 .listing-no-reviews {
   margin-left: auto;
-  color: #777a70;
+  color: #626d63;
   font-size: 12px;
   white-space: nowrap;
 }
@@ -248,7 +260,7 @@
 }
 .listing-location time {
   flex-shrink: 0;
-  color: #777a70;
+  color: #626d63;
   font-size: 12px;
 }
 .listing-card .provider-line {
@@ -277,7 +289,9 @@
   justify-content: space-between;
   gap: 10px;
   padding: 9px 11px 12px;
-  border-top: 1px solid #eeeee6;
+  border-top: 1px solid #dce8df;
+  background: linear-gradient(180deg, #ffffff50, #dfece33b);
+  box-shadow: inset 0 1px 0 #ffffffb8;
 }
 .listing-open {
   display: inline-flex;
@@ -286,8 +300,8 @@
   gap: 12px;
   min-height: 44px;
   padding: 0 12px;
-  background: #e9f0ec;
-  border: 1px solid #dce8df;
+  background: #f4faf3b8;
+  border: 1px solid #cadfd3;
   border-radius: 13px;
   color: #285955;
   font-size: 12px;
@@ -376,6 +390,7 @@
 @media (forced-colors: active) {
   .listing-card,
   .listing-open,
+  .listing-card .save-button,
   .listing-photo-count,
   .listing-photo-navigation > div {
     border: 1px solid ButtonText;
