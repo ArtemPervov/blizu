@@ -12,6 +12,7 @@ services:
       NODE_ENV: production
       APP_ORIGIN: ${APP_ORIGIN:?Set the public HTTPS origin}
       ENABLE_DEMO: ${ENABLE_DEMO:-false}
+      ENABLE_DELIVERY: ${ENABLE_DELIVERY:-false}
       DELIVERY_STALE_HOURS: ${DELIVERY_STALE_HOURS:-72}
       ADMIN_EMAIL: ${ADMIN_EMAIL:?Set the arbiter email}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set a strong arbiter password}

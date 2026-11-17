@@ -37,6 +37,7 @@ import type { CreateAction } from "./App";
 import { OrderProgress } from "./components/OrderProgress";
 import { getOrderAction } from "./order-state";
 import { BrandSpark } from "./components/BrandIllustration";
+import { orderHelpPath } from "./market-copy";
 
 type WorkspaceData = {
   orders: Order[];
@@ -320,9 +321,11 @@ function OrderRows({ orders, user }: { orders: Order[]; user: User }) {
 export function DashboardPage({
   create,
   requireLogin,
+  deliveryEnabled,
 }: {
   create: CreateAction;
   requireLogin: () => void;
+  deliveryEnabled: boolean;
 }) {
   const { user, loading } = useAuth();
   const query = useWorkspace(user);
@@ -511,13 +514,21 @@ export function DashboardPage({
             )}
           </section>
           <div className="workspace-shortcuts">
-            <Link to="/delivery">
+            <Link to={deliveryEnabled ? "/delivery" : orderHelpPath}>
               <span className="shortcut-icon">
                 <Truck size={24} strokeWidth={1.3} />
               </span>
               <div>
-                <h3>Что-то важное издалека?</h3>
-                <p>Найдите логиста для вашей покупки.</p>
+                <h3>
+                  {deliveryEnabled
+                    ? "Что-то важное издалека?"
+                    : "Помощь с заказами"}
+                </h3>
+                <p>
+                  {deliveryEnabled
+                    ? "Найдите логиста для вашей покупки."
+                    : "Найдите помощь с оформлением покупки."}
+                </p>
               </div>
               <ArrowUpRight size={19} />
             </Link>

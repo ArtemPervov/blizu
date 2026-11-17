@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Link,
   NavLink,
+  Navigate,
   Route,
   Routes,
   useLocation,
@@ -22,6 +23,8 @@ import {
   Plus,
   Package,
   ShieldCheck,
+  ShoppingBag,
+  Truck,
   UserRound,
   X,
 } from "lucide-react";
@@ -51,6 +54,7 @@ import { OperatorPage } from "./OperatorPage";
 import { useAvailableListings } from "./available-listings";
 import { ReportModal, type ReportTarget } from "./components/ReportButton";
 import { CityPicker } from "./components/CityPicker";
+import { orderHelpPath } from "./market-copy";
 export type CreateAction = (kind: CreateKind, preset?: CreatePreset) => void;
 
 export default function App() {
@@ -93,11 +97,12 @@ export default function App() {
   }, [location.pathname, location.search]);
   const intent = useRef<(() => void) | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { data: meta } = useQuery({
+  const { data: meta, isPending: metaPending } = useQuery({
     queryKey: ["meta"],
     queryFn: () =>
       api<{
         demo: boolean;
+        deliveryEnabled: boolean;
         stats: {
           listings: number;
           providers: number;
@@ -106,6 +111,7 @@ export default function App() {
         };
       }>("/meta"),
   });
+  const deliveryEnabled = meta?.deliveryEnabled === true;
   const { data: notifications } = useQuery({
     queryKey: ["notifications", user?.id],
     queryFn: () => api<{ items: Notification[] }>("/notifications"),
@@ -113,6 +119,7 @@ export default function App() {
     refetchInterval: 30000,
   });
   const createAction: CreateAction = (kind, preset) => {
+    if (kind === "delivery" && !deliveryEnabled) return;
     if (!user) {
       intent.current = () => setCreate({ kind, preset });
       setAuthOpen(true);
@@ -125,7 +132,8 @@ export default function App() {
     } else setReport(target);
   };
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "instant" });
+    if (location.hash !== "#catalog")
+      window.scrollTo({ top: 0, behavior: "instant" });
     setUserMenu(false);
     setMobileOpen(false);
     setNotificationsOpen(false);
@@ -156,12 +164,26 @@ export default function App() {
             <NavLink to="/requests">
               {language === "ru" ? "Заявки" : t.requests}
             </NavLink>
-            <NavLink to="/delivery">{t.delivery}</NavLink>
+            {deliveryEnabled ? (
+              <NavLink to="/delivery">{t.delivery}</NavLink>
+            ) : (
+              <Link to={orderHelpPath}>{t.orderHelp}</Link>
+            )}
           </nav>
           <div className="header-actions">
             <CityPicker city={city} onChange={setCity} />
             <label className="language-control">
               <Globe2 size={15} />
+              <span className="mobile-language-label" aria-hidden="true">
+                <span className={language === "ru" ? "active" : undefined}>
+                  RU
+                </span>
+                <span>/</span>
+                <span className={language === "me" ? "active" : undefined}>
+                  ME
+                </span>
+                {language === "en" && <span className="active">EN</span>}
+              </span>
               <select
                 aria-label="Язык интерфейса"
                 value={language}
@@ -169,7 +191,7 @@ export default function App() {
               >
                 <option value="ru">RU</option>
                 <option value="en">EN</option>
-                <option value="sr">SR</option>
+                <option value="me">ME</option>
               </select>
             </label>
             <div className="account-controls" ref={menuRef}>
@@ -304,8 +326,9 @@ export default function App() {
             </button>
             <button
               className="icon-button mobile-toggle"
-              aria-label="Открыть меню"
+              aria-label={mobileOpen ? "Закрыть меню" : "Открыть меню"}
               aria-expanded={mobileOpen}
+              aria-controls={mobileOpen ? "mobile-menu" : undefined}
               onClick={() => setMobileOpen((v) => !v)}
             >
               {mobileOpen ? <X /> : <Menu />}
@@ -313,17 +336,34 @@ export default function App() {
           </div>
         </div>
         {mobileOpen && (
-          <nav className="mobile-nav">
-            <NavLink to="/">{t.services}</NavLink>
+          <nav
+            className="mobile-nav"
+            id="mobile-menu"
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest("a, button"))
+                setMobileOpen(false);
+            }}
+          >
+            <NavLink to="/" end>
+              {t.services}
+            </NavLink>
             <NavLink to="/requests">{t.requests}</NavLink>
-            <NavLink to="/delivery">{t.delivery}</NavLink>
-            <NavLink to="/dashboard">Личный кабинет</NavLink>
-            <NavLink to="/orders">Мои заказы</NavLink>
+            {deliveryEnabled ? (
+              <NavLink to="/delivery">{t.delivery}</NavLink>
+            ) : (
+              <Link to={orderHelpPath}>{t.orderHelp}</Link>
+            )}
+            <NavLink to="/dashboard">{t.orders}</NavLink>
+            <NavLink to="/orders">{t.myOrders}</NavLink>
             {user?.isOperator && (
               <NavLink to="/operator">Панель оператора</NavLink>
             )}
-            <button onClick={() => createAction("request")}>
-              Создать заявку
+            <button
+              onClick={() =>
+                createAction(user?.role === "provider" ? "listing" : "request")
+              }
+            >
+              {user?.role === "provider" ? t.newListing : t.newRequest}
             </button>
           </nav>
         )}
@@ -348,6 +388,7 @@ export default function App() {
                 city={city}
                 setCity={setCity}
                 create={createAction}
+                deliveryEnabled={deliveryEnabled}
               />
             }
           />
@@ -357,7 +398,15 @@ export default function App() {
           />
           <Route
             path="/delivery"
-            element={<DeliveryPage create={createAction} />}
+            element={
+              deliveryEnabled ? (
+                <DeliveryPage create={createAction} />
+              ) : metaPending ? (
+                <Loading />
+              ) : (
+                <Navigate replace to={orderHelpPath} />
+              )
+            }
           />
           <Route
             path="/listings/:id"
@@ -370,6 +419,7 @@ export default function App() {
             element={
               <DashboardPage
                 create={createAction}
+                deliveryEnabled={deliveryEnabled}
                 requireLogin={() => setAuthOpen(true)}
               />
             }
@@ -412,26 +462,33 @@ export default function App() {
           />
         </Routes>
       </main>
-      <nav className="bottom-navigation" aria-label="Мобильная навигация">
+      <nav className="bottom-navigation" aria-label={t.mobileNav}>
         <NavLink to="/" end>
           <House size={20} />
-          <span>Главная</span>
+          <span>{t.home}</span>
         </NavLink>
         <NavLink to="/requests">
           <MessageCircle size={20} />
-          <span>Заявки</span>
+          <span>{t.requestsShort}</span>
         </NavLink>
-        <button onClick={() => createAction("request")}>
-          <Plus size={22} />
-          <span>Создать</span>
-        </button>
+        {deliveryEnabled ? (
+          <NavLink to="/delivery">
+            <Truck size={20} />
+            <span>{t.delivery}</span>
+          </NavLink>
+        ) : (
+          <Link to={orderHelpPath}>
+            <ShoppingBag size={20} />
+            <span>{t.orderHelpShort}</span>
+          </Link>
+        )}
         <NavLink to="/favorites">
           <Heart size={20} />
-          <span>Избранное</span>
+          <span>{t.favorites}</span>
         </NavLink>
         <NavLink to="/dashboard">
           <UserRound size={20} />
-          <span>Мои дела</span>
+          <span>{t.orders}</span>
         </NavLink>
       </nav>
       <CompareTray />
@@ -448,7 +505,9 @@ export default function App() {
           <div className="footer-links">
             <Link to="/">Услуги и товары</Link>
             <Link to="/requests">Найти исполнителя</Link>
-            <Link to="/delivery">Заказать доставку</Link>
+            <Link to={deliveryEnabled ? "/delivery" : orderHelpPath}>
+              {deliveryEnabled ? "Заказать доставку" : t.orderHelp}
+            </Link>
             <Link to="/dashboard">Личный кабинет</Link>
           </div>
           <div className="footer-note">
@@ -472,7 +531,7 @@ export default function App() {
           </span>
           <span>
             {meta?.demo
-              ? "Демо-режим · предложения и отзывы вымышлены"
+              ? "Карточки с пометкой «Демо» содержат вымышленные данные"
               : "Оплата напрямую между сторонами"}
           </span>
           <span className="footer-coordinates">42°25′ N &nbsp; 18°46′ E</span>
@@ -499,6 +558,7 @@ export default function App() {
         <CreateModal
           kind={create.kind}
           preset={create.preset}
+          deliveryEnabled={deliveryEnabled}
           onClose={() => setCreate(null)}
         />
       )}
@@ -539,9 +599,8 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
   return (
     <div className="page-shell">
       {user && (
-        <Link className="back-link" to="/dashboard">
-          <ArrowLeft size={16} aria-hidden="true" />
-          В личный кабинет
+        <Link className="back-link favorites-back" to="/dashboard">
+          <ArrowLeft size={16} aria-hidden="true" />В личный кабинет
         </Link>
       )}
       <div className="page-heading">

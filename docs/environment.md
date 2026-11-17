@@ -27,6 +27,7 @@
 | --- | --- | --- |
 | `PROXY_NETWORK` | `proxy` | Если общая Docker-сеть с NPM называется иначе. Она должна существовать, и контейнер NPM должен быть подключён к ней. |
 | `ENABLE_DEMO` | `false` | `true` включает вымышленные данные и вход под демо-ролями, включая арбитра и оператора. Используйте только для демонстрационного окружения. |
+| `ENABLE_DELIVERY` | `false` | `true` открывает страницу международной доставки и создание новых заявок на неё. По умолчанию для MVP доступна рубрика «Помощь с заказами» в общем каталоге. Существующие заказы доступны участникам. |
 | `DELIVERY_STALE_HOURS` | `72` | Через сколько часов без обновления доставки автоматически открывать инцидент. Положительное число; проверка выполняется раз в минуту. |
 | `BLIZU_IMAGE_PREFIX` | `blizu` | Префикс готовых Docker-образов. Например, `ghcr.io/artempervov/blizu` даст образы `ghcr.io/artempervov/blizu-api` и `ghcr.io/artempervov/blizu-web`. Эти образы сначала нужно собрать и опубликовать в своём registry. |
 | `BLIZU_VERSION` | `latest` | Тег обоих готовых образов, например `1.0.0`. В registry или на Docker-хосте должен существовать указанный тег. |
@@ -43,6 +44,7 @@ OPERATOR_EMAIL=
 OPERATOR_PASSWORD=
 PROXY_NETWORK=proxy
 ENABLE_DEMO=false
+ENABLE_DELIVERY=false
 DELIVERY_STALE_HOURS=72
 BLIZU_IMAGE_PREFIX=blizu
 BLIZU_VERSION=latest

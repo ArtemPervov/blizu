@@ -20,6 +20,7 @@ const { app, store, checkStaleOrders } = createApp({
   origin: process.env.APP_ORIGIN,
   dataDir: process.env.DATA_DIR,
   staleHours,
+  deliveryEnabled: process.env.ENABLE_DELIVERY === "true",
 });
 if (
   process.env.ADMIN_EMAIL &&

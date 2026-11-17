@@ -82,7 +82,11 @@ export class Store {
         priceLabel TEXT NOT NULL, priceKnown INTEGER NOT NULL, photos TEXT NOT NULL,
         contentHash TEXT NOT NULL, UNIQUE(channel,contentHash)
       );
-      PRAGMA user_version=3;
+      CREATE TABLE IF NOT EXISTS listing_contacts (
+        listingId TEXT PRIMARY KEY REFERENCES listings(id) ON DELETE CASCADE,
+        telegram TEXT NOT NULL DEFAULT '', viber TEXT NOT NULL DEFAULT ''
+      );
+      PRAGMA user_version=4;
     `),
     );
   }

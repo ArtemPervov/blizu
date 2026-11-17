@@ -30,6 +30,7 @@ import {
   type Incident,
 } from "../shared/types.js";
 import { Store, now, seedDemo, seedDemoOperator } from "./db.js";
+import { seedDemoCatalog } from "./demo-catalog.js";
 import { HttpError } from "./errors.js";
 export { HttpError } from "./errors.js";
 import {
@@ -69,6 +70,7 @@ export type AppOptions = {
   origin?: string;
   dataDir?: string;
   staleHours?: number;
+  deliveryEnabled?: boolean;
 };
 
 export async function passwordHash(password: string) {
@@ -93,6 +95,10 @@ export function createApp(options: AppOptions = {}) {
   const store = options.store ?? new Store(resolve(dataDir, "blizu.sqlite"));
   const demo = options.demo ?? false;
   const production = options.production ?? false;
+  const deliveryEnabled = options.deliveryEnabled ?? false;
+  const publicListings = deliveryEnabled
+    ? VISIBLE_LISTING_SQL
+    : `${VISIBLE_LISTING_SQL} AND NOT (l.id='l-delivery' AND u.id='demo-logistic')`;
   if (
     production &&
     !demo &&
@@ -103,6 +109,7 @@ export function createApp(options: AppOptions = {}) {
     );
   if (demo) {
     seedDemo(store);
+    seedDemoCatalog(store);
     seedDemoOperator(store);
   }
   const uploadDir = resolve(dataDir, "uploads");
@@ -289,6 +296,7 @@ export function createApp(options: AppOptions = {}) {
   app.get("/api/meta", (_req, res) =>
     res.json({
       demo,
+      deliveryEnabled,
       categories: CATEGORIES,
       cities: CITIES,
       stats: {
@@ -297,13 +305,13 @@ export function createApp(options: AppOptions = {}) {
             `SELECT COUNT(*) n FROM listing_sources ls JOIN listings l ON l.id=ls.listingId JOIN users u ON u.id=l.providerId WHERE ${VISIBLE_LISTING_SQL}`,
           )?.n ?? 0,
         listings: store.get<{ n: number }>(
-          `SELECT COUNT(*) n FROM listings l JOIN users u ON u.id=l.providerId WHERE ${VISIBLE_LISTING_SQL}`,
+          `SELECT COUNT(*) n FROM listings l JOIN users u ON u.id=l.providerId WHERE ${publicListings}`,
         )?.n,
         providers: store.get<{ n: number }>(
           "SELECT COUNT(*) n FROM users WHERE role='provider' AND id NOT LIKE 'source-%' AND id NOT IN (SELECT userId FROM account_restrictions)",
         )?.n,
         requests: store.get<{ n: number }>(
-          "SELECT COUNT(*) n FROM requests WHERE status='open' AND customerId NOT IN (SELECT userId FROM account_restrictions)",
+          `SELECT COUNT(*) n FROM requests WHERE status='open' AND customerId NOT IN (SELECT userId FROM account_restrictions)${deliveryEnabled ? "" : " AND kind='service'"}`,
         )?.n,
       },
     }),
@@ -390,7 +398,7 @@ export function createApp(options: AppOptions = {}) {
       .object({
         q: z.string().max(200).optional(),
         ids: z.string().max(11000).optional(),
-        source: z.enum(["telegram"]).optional(),
+        source: z.enum(["telegram", "demo"]).optional(),
         category: z.string().max(40).optional(),
         city: z.string().max(80).optional(),
         sort: z
@@ -411,12 +419,14 @@ export function createApp(options: AppOptions = {}) {
         { message: "Минимальная цена не должна быть выше максимальной" },
       )
       .parse(req.query);
-    const where = [VISIBLE_LISTING_SQL];
+    const where = [publicListings];
     const params: (string | number)[] = [];
-    if (input.source)
+    if (input.source === "telegram")
       where.push(
         "EXISTS (SELECT 1 FROM listing_sources ls WHERE ls.listingId=l.id)",
       );
+    if (input.source === "demo")
+      where.push(demo ? "u.id LIKE 'demo-%'" : "0=1");
     if (input.ids !== undefined) {
       const ids = z
         .array(z.string().min(1).max(100))
@@ -502,10 +512,18 @@ export function createApp(options: AppOptions = {}) {
       !req.user?.isOperator
     )
       throw new HttpError(404, "Предложение не найдено.");
+    const publicContact =
+      !hidden && !ownerBlocked
+        ? store.get<{ telegram: string; viber: string }>(
+            "SELECT telegram,viber FROM listing_contacts WHERE listingId=?",
+            String(item.id),
+          )
+        : undefined;
     res.json({
       item: attachListingSources(store, [
         {
           ...item,
+          ...(publicContact && { publicContact }),
           tags: JSON.parse(String(item.tags)),
           providerVerified: Boolean(item.providerVerified),
           ...(req.user?.id === item.providerId || req.user?.isOperator
@@ -557,6 +575,28 @@ export function createApp(options: AppOptions = {}) {
           city,
           price: money,
           unit: text(1, 40),
+          telegram: z
+            .string()
+            .trim()
+            .regex(
+              /^(?:@?[a-zA-Z][a-zA-Z0-9_]{3,31})?$/,
+              "Укажите имя пользователя Telegram, например @username.",
+            )
+            .default(""),
+          viber: z
+            .string()
+            .trim()
+            .max(32)
+            .transform((value) => value.replace(/[\s()-]/g, ""))
+            .pipe(
+              z
+                .string()
+                .regex(
+                  /^(?:\+[1-9]\d{7,14})?$/,
+                  "Укажите номер Viber с кодом страны, например +382… .",
+                ),
+            )
+            .default(""),
           image: z
             .enum([
               "repair",
@@ -572,19 +612,29 @@ export function createApp(options: AppOptions = {}) {
         })
         .parse(req.body);
       const id = randomUUID();
-      store.run(
-        "INSERT INTO listings (id,providerId,title,description,category,city,price,unit,image,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        id,
-        req.user!.id,
-        input.title,
-        input.description,
-        input.category,
-        input.city,
-        input.price,
-        input.unit,
-        `/images/${input.image}.jpg`,
-        now(),
-      );
+      store.transaction(() => {
+        store.run(
+          "INSERT INTO listings (id,providerId,title,description,category,city,price,unit,image,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)",
+          id,
+          req.user!.id,
+          input.title,
+          input.description,
+          input.category,
+          input.city,
+          input.price,
+          input.unit,
+          `/images/${input.image}.jpg`,
+          now(),
+        );
+        if (input.telegram || input.viber) {
+          store.run(
+            "INSERT INTO listing_contacts (listingId,telegram,viber) VALUES (?,?,?)",
+            id,
+            input.telegram.replace(/^@/, ""),
+            input.viber,
+          );
+        }
+      });
       res.status(201).json({ id });
     },
   );
@@ -651,6 +701,7 @@ export function createApp(options: AppOptions = {}) {
       "r.status='open'",
       "NOT EXISTS(SELECT 1 FROM account_restrictions ar WHERE ar.userId=r.customerId)",
     ];
+    if (!deliveryEnabled) where.push("r.kind='service'");
     const params: string[] = [];
     if (input.city && input.city !== "Вся Черногория") {
       where.push("r.city=?");
@@ -691,6 +742,12 @@ export function createApp(options: AppOptions = {}) {
         },
       )
       .parse(req.body);
+    if (!deliveryEnabled && input.kind === "delivery") {
+      throw new HttpError(
+        403,
+        "В каталоге доступна помощь с заказами. Заявки на международную доставку отключены.",
+      );
+    }
     const id = randomUUID();
     store.transaction(() => {
       store.run(

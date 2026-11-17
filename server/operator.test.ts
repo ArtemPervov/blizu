@@ -487,7 +487,7 @@ test("schema upgrade preserves existing data and sessions; operator provisioning
     store = new Store(path);
     assert.equal(
       store.get<{ user_version: number }>("PRAGMA user_version")!.user_version,
-      3,
+      4,
     );
     assert.ok(store.get("SELECT id FROM users WHERE id=?", session));
     assert.ok(store.get("SELECT token FROM sessions WHERE userId=?", session));

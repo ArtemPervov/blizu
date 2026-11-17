@@ -24,12 +24,13 @@ import {
   Images,
   Send,
 } from "lucide-react";
-import { Link } from "react-router-dom";
-import { CATEGORIES, type Listing } from "../../shared/types";
+import { Link, useLocation } from "react-router-dom";
+import type { Listing } from "../../shared/types";
 import { euro, useI18n } from "../lib";
 const ParticleScene = lazy(() => import("./Particles"));
 import { BrandIllustration, type IllustrationKind } from "./BrandIllustration";
 import { listingAuthor, listingCity } from "../listing-format";
+import { categoryName, cityName } from "../market-copy";
 import { useListingFavorite } from "../listing-favorite";
 import { ListingPhoto, listingPhotos } from "./ListingPhoto";
 
@@ -162,6 +163,20 @@ export function ListingCard({
   onCompare?: () => void;
   compared?: boolean;
 }) {
+  const location = useLocation();
+  const card = useRef<HTMLElement>(null);
+  const listingPath = `/listings/${listing.id}`;
+  const listingState = {
+    from: `${location.pathname}${location.search}${location.hash}`,
+  };
+  useEffect(() => {
+    if (location.state?.restoreListing !== listing.id) return;
+    const timer = window.setTimeout(
+      () => card.current?.scrollIntoView({ block: "start" }),
+      0,
+    );
+    return () => window.clearTimeout(timer);
+  }, [listing.id, location.state]);
   const [photoActive, setPhotoActive] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
   const photos = listingPhotos(listing);
@@ -170,13 +185,12 @@ export function ListingCard({
   const author = listingAuthor(listing);
   const initial =
     [...author].find((character) => /[\p{L}\p{N}]/u.test(character)) ?? "·";
-  const categoryName =
-    CATEGORIES.find((category) => category.id === listing.category)?.name ||
-    "Местное предложение";
-  const { t } = useI18n();
+  const { language, t } = useI18n();
+  const category = categoryName(listing.category, language) ?? t.all;
   const { saved, busy, toggle } = useListingFavorite(listing);
   return (
     <article
+      ref={card}
       className={`listing-card${immersive ? " listing-card--immersive" : ""}`}
       data-category={listing.category}
       onFocusCapture={() => {
@@ -201,7 +215,12 @@ export function ListingCard({
             setPhotoActive(false);
         }}
       >
-        <Link to={`/listings/${listing.id}`} tabIndex={-1} aria-hidden="true">
+        <Link
+          to={listingPath}
+          state={listingState}
+          tabIndex={-1}
+          aria-hidden="true"
+        >
           <ListingPhoto src={image} alt="" />
         </Link>
         {immersive && photoActive && (
@@ -256,7 +275,7 @@ export function ListingCard({
       </div>
       <div className="listing-body">
         <div className="listing-eyebrow">
-          <span className="listing-category">{categoryName}</span>
+          <span className="listing-category">{category}</span>
           {listing.source && (
             <span className="listing-source-label">
               <Send size={12} />
@@ -264,20 +283,31 @@ export function ListingCard({
             </span>
           )}
           {!listing.source && listing.providerId.startsWith("demo-") && (
-            <span className="listing-demo-label">Демо</span>
+            <span className="listing-demo-label">{t.demoLabel}</span>
           )}
         </div>
         <h3 className="listing-heading">
-          <Link className="listing-title" to={`/listings/${listing.id}`}>
+          <Link className="listing-title" to={listingPath} state={listingState}>
             {listing.title}
           </Link>
         </h3>
         <div className="listing-bottom">
           <div>
             {listing.source ? (
-              <strong className="source-price">
-                {listing.source.priceLabel}
-              </strong>
+              <>
+                <strong
+                  className={`source-price${listing.source.priceKnown ? "" : " source-price-unlisted"}`}
+                >
+                  {listing.source.priceLabel}
+                </strong>
+                {!listing.source.priceKnown && (
+                  <span className="mobile-source-price">
+                    {listing.source.priceLabel === "Цены в объявлении"
+                      ? t.pricesInDescription
+                      : t.askPrice}
+                  </span>
+                )}
+              </>
             ) : (
               <>
                 <span className="muted small">{t.from} </span>
@@ -288,10 +318,16 @@ export function ListingCard({
           </div>
         </div>
         <p className="listing-excerpt">{listing.description}</p>
-        <div className="listing-location">
+        <div
+          className={
+            listing.source && listing.city === "Вся Черногория"
+              ? "listing-location listing-location-undisclosed"
+              : "listing-location"
+          }
+        >
           <span>
             <MapPin size={13} />
-            {listingCity(listing)}
+            {cityName(listingCity(listing, t.searchCityUnknown), language)}
           </span>
           {listing.source && (
             <time
@@ -339,7 +375,8 @@ export function ListingCard({
         <Link
           className="listing-open"
           aria-label={`${t.details}: ${listing.title}`}
-          to={`/listings/${listing.id}`}
+          to={listingPath}
+          state={listingState}
         >
           {t.details}
           <ArrowUpRight size={16} />
@@ -351,8 +388,8 @@ export function ListingCard({
             onClick={onCompare}
             aria-label={`${compared ? "Убрать из сравнения" : "Сравнить"}: ${listing.title}`}
           >
-            {compared ? <Check size={15} /> : <Columns3 size={15} />}{" "}
-            {compared ? "Выбрано" : "Сравнить"}
+            {compared ? <Check size={15} /> : <Columns3 size={15} />}
+            <span>{compared ? "Выбрано" : "Сравнить"}</span>
           </button>
         )}
       </div>

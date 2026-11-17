@@ -108,6 +108,7 @@ beforeEach(() => {
   fixture = createApp({
     store: new Store(":memory:"),
     demo: true,
+    deliveryEnabled: true,
     dataDir: dir,
     origin: "http://blizu.test",
   });
@@ -177,7 +178,7 @@ function mount(path = "/") {
   );
 }
 async function cards() {
-  await waitFor(() => assert.equal(screen.getAllByRole("article").length, 8));
+  await waitFor(() => assert.equal(screen.getAllByRole("article").length, 12));
   return screen.getAllByRole("article");
 }
 function header() {
@@ -351,6 +352,31 @@ test("catalogue and detail galleries support manual photos, enlargement, and sha
   const gallery = within(
     screen.getByRole("region", { name: "Фотографии объявления" }),
   );
+  const expand = gallery.getByRole("button", { name: "Увеличить фото" });
+  const touch = {
+    pointerId: 1,
+    pointerType: "touch",
+    isPrimary: true,
+    clientY: 80,
+  };
+  fireEvent(
+    expand,
+    Object.assign(new window.Event("pointerdown", { bubbles: true }), touch, {
+      clientX: 130,
+    }),
+  );
+  fireEvent(
+    expand,
+    Object.assign(new window.Event("pointerup", { bubbles: true }), touch, {
+      clientX: 55,
+    }),
+  );
+  assert.equal(
+    gallery.getByRole("img").getAttribute("src"),
+    "/images/food.jpg",
+  );
+  fireEvent.click(expand, { detail: 1 });
+  assert.ok(!screen.queryByRole("dialog"));
   fireEvent.click(gallery.getByRole("button", { name: "Показать фото 2" }));
   assert.equal(
     gallery.getByRole("img").getAttribute("src"),
@@ -439,10 +465,9 @@ test("header city picker supports keyboard navigation, dismissal and catalogue f
   );
   fireEvent.click(trigger);
   fireEvent.click(
-    within(screen.getByRole("listbox", { name: "Города Черногории" })).getByRole(
-      "option",
-      { name: "Будва" },
-    ),
+    within(
+      screen.getByRole("listbox", { name: "Города Черногории" }),
+    ).getByRole("option", { name: "Будва" }),
   );
   await screen.findByRole("button", { name: "Ваш город: Будва" });
   assert.equal(
@@ -487,6 +512,59 @@ test("search history and real price validation help refine or recover a search",
   );
 });
 
+test("mobile filters apply category and sort together and keep the selected city", async () => {
+  mount("/?city=Бар");
+  const categories = within(
+    screen.getByRole("navigation", { name: "Категории предложений" }),
+  );
+  fireEvent.click(categories.getByRole("button", { name: "Дом и ремонт" }));
+  await screen.findByRole("heading", { name: "Дом и ремонт", level: 2 });
+  const filters = within(screen.getByRole("search")).getByRole("button", {
+    name: /^Фильтры/,
+  });
+  fireEvent.click(filters);
+  const dialog = within(screen.getByRole("dialog", { name: "Фильтры" }));
+  assert.equal(
+    (dialog.getByLabelText("Город", { exact: true }) as HTMLSelectElement)
+      .value,
+    "Бар",
+  );
+  assert.equal(
+    dialog
+      .getByRole("button", { name: "Дом и ремонт" })
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  fireEvent.click(dialog.getByRole("button", { name: "Товары и магазины" }));
+  fireEvent.change(dialog.getByLabelText("Сортировка"), {
+    target: { value: "price" },
+  });
+  fireEvent.click(dialog.getByRole("button", { name: "Показать" }));
+  await screen.findByRole("heading", { name: "Товары и магазины", level: 2 });
+  assert.equal(filters.getAttribute("aria-expanded"), "false");
+  assert.equal(
+    (screen.getByLabelText("Город поиска") as HTMLSelectElement).value,
+    "Бар",
+  );
+  fireEvent.click(filters);
+  const reopened = within(screen.getByRole("dialog", { name: "Фильтры" }));
+  assert.equal(
+    reopened
+      .getByRole("button", { name: "Товары и магазины" })
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  assert.equal(
+    (reopened.getByLabelText("Сортировка") as HTMLSelectElement).value,
+    "price",
+  );
+  fireEvent.click(reopened.getByRole("button", { name: "Сбросить" }));
+  fireEvent.click(reopened.getByRole("button", { name: "Закрыть" }));
+  assert.ok(
+    screen.getByRole("heading", { name: "Товары и магазины", level: 2 }),
+  );
+});
+
 test("mobile filter dialog applies real results and changing a city resets pagination", async () => {
   const expected = (
     await agent.get("/api/listings?city=Бар&maxPrice=20.5").expect(200)
@@ -497,9 +575,7 @@ test("mobile filter dialog applies real results and changing a city resets pagin
   });
   await waitFor(() => assert.ok(screen.getAllByRole("article").length > 0));
   fireEvent.click(screen.getByRole("button", { name: /^Фильтры/ }));
-  const dialog = within(
-    screen.getByRole("dialog", { name: "Фильтры предложений" }),
-  );
+  const dialog = within(screen.getByRole("dialog", { name: "Фильтры" }));
   const maxPrice = dialog.getByLabelText(
     "Максимальная цена",
   ) as HTMLInputElement;
@@ -507,7 +583,7 @@ test("mobile filter dialog applies real results and changing a city resets pagin
     target: { value: "20.5" },
   });
   assert.equal(maxPrice.checkValidity(), true);
-  fireEvent.click(dialog.getByRole("button", { name: "Применить фильтры" }));
+  fireEvent.click(dialog.getByRole("button", { name: "Показать" }));
   await waitFor(() => {
     if (screen.queryByRole("dialog")) throw new Error("Dialog is still open");
   });
@@ -653,7 +729,10 @@ test("guest favorites transfer into an account only after explicit action", asyn
 
 test("delivery keeps the product link and origin through guest sign-in without publishing a request", async () => {
   mount("/delivery");
-  const form = within(screen.getByRole("form", { name: "Заявка на доставку" }));
+  const deliveryForm = await screen.findByRole("form", {
+    name: "Заявка на доставку",
+  });
+  const form = within(deliveryForm);
   const productUrl = "https://shop.example/product?id=2";
   fireEvent.change(form.getByLabelText("Ссылка на покупку"), {
     target: { value: productUrl },
@@ -661,7 +740,7 @@ test("delivery keeps the product link and origin through guest sign-in without p
   fireEvent.change(form.getByLabelText("Страна отправления"), {
     target: { value: "Китай" },
   });
-  fireEvent.submit(screen.getByRole("form", { name: "Заявка на доставку" }));
+  fireEvent.submit(deliveryForm);
   const auth = within(
     await screen.findByRole("dialog", { name: "С возвращением" }),
   );
@@ -839,7 +918,7 @@ test("workspace next steps come from real offers and a delivery awaiting the cus
 
 test("delivery answers expose their expanded state and closing a save notification keeps the favorite", async () => {
   mount("/delivery");
-  const question = screen.getByRole("button", {
+  const question = await screen.findByRole("button", {
     name: "Как узнать стоимость?",
   });
   const content = document.getElementById(
@@ -1085,7 +1164,8 @@ test("guest saved snapshots and recently viewed items are checked against curren
       screen.getByRole("navigation", { name: "Основная навигация" }),
     ).getByRole("link", { name: "Услуги и товары" }),
   );
-  await waitFor(() => assert.equal(screen.getAllByRole("article").length, 7));
+  await cards();
+  assert.ok(!screen.queryByRole("link", { name: item.title, exact: true }));
   assert.ok(!screen.queryByRole("heading", { name: "Вы недавно смотрели" }));
 });
 

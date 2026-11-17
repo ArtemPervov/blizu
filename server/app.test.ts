@@ -73,17 +73,19 @@ test("catalog filters are applied before pagination and include a stable total",
   }
 });
 
-function fixture(demo = true) {
+function fixture(demo = true, deliveryEnabled = true) {
   const dir = mkdtempSync(join(tmpdir(), "blizu-test-"));
   const store = new Store(":memory:");
   const result = createApp({
     store,
     demo,
+    deliveryEnabled,
     dataDir: dir,
     origin: "https://blizu.test",
   });
   return {
     ...result,
+    dataDir: dir,
     cleanup: () => {
       store.close();
       rmSync(dir, { recursive: true, force: true });
@@ -95,6 +97,68 @@ async function login(app: ReturnType<typeof createApp>["app"], role: string) {
   await agent.post("/api/auth/demo").send({ role }).expect(200);
   return agent;
 }
+
+test("MVP keeps local order help, excludes new international delivery, and seeds demos once", async () => {
+  const f = fixture(true, false);
+  try {
+    const client = request(f.app);
+    assert.equal(
+      (await client.get("/api/meta").expect(200)).body.deliveryEnabled,
+      false,
+    );
+    const demos = (await client.get("/api/listings?source=demo").expect(200))
+      .body;
+    assert.equal(demos.total, 19);
+    assert.ok(
+      demos.items.every((item: { providerId: string }) =>
+        item.providerId.startsWith("demo-"),
+      ),
+    );
+    assert.ok(
+      demos.items.some(
+        (item: { category: string }) => item.category === "delivery",
+      ),
+    );
+    const second = createApp({
+      store: f.store,
+      demo: true,
+      dataDir: f.dataDir,
+    });
+    assert.equal(
+      (await request(second.app).get("/api/listings?source=demo").expect(200))
+        .body.total,
+      19,
+    );
+    assert.deepEqual(
+      (await client.get("/api/requests?kind=delivery").expect(200)).body.items,
+      [],
+    );
+
+    const customer = await login(f.app, "customer");
+    const input = {
+      title: "Нужна помощь с покупкой",
+      description: "Помогите разобраться с оформлением заказа.",
+      category: "delivery",
+      city: "Будва",
+      budget: 20,
+    };
+    await customer
+      .post("/api/requests")
+      .send({
+        ...input,
+        kind: "delivery",
+        productUrl: "https://example.com/product",
+        origin: "Европа",
+      })
+      .expect(403);
+    await customer
+      .post("/api/requests")
+      .send({ ...input, kind: "service" })
+      .expect(201);
+  } finally {
+    f.cleanup();
+  }
+});
 
 test("registration, persistent session, logout and protection against role escalation", async () => {
   const f = fixture(false);
@@ -142,6 +206,62 @@ test("registration, persistent session, logout and protection against role escal
       .post("/api/auth/demo")
       .send({ role: "arbiter" })
       .expect(404);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("listing details publish only contacts explicitly supplied by a provider", async () => {
+  const f = fixture();
+  try {
+    const guest = request(f.app);
+    const provider = await login(f.app, "provider");
+    const input = {
+      title: "Ремонт бытовой техники",
+      description: "Диагностика и ремонт бытовой техники на дому.",
+      category: "repair",
+      city: "Бар",
+      price: 30,
+      unit: "услуга",
+    };
+    const privateListing = await provider
+      .post("/api/listings")
+      .send(input)
+      .expect(201);
+    const privateDetail = await guest
+      .get(`/api/listings/${privateListing.body.id}`)
+      .expect(200);
+    assert.equal(privateDetail.body.item.publicContact, undefined);
+
+    await provider
+      .post("/api/listings")
+      .send({ ...input, telegram: "https://example.test" })
+      .expect(400);
+    const published = await provider
+      .post("/api/listings")
+      .send({
+        ...input,
+        telegram: "@blizu_example",
+        viber: "+382 (67) 555-010",
+      })
+      .expect(201);
+    const detail = await guest
+      .get(`/api/listings/${published.body.id}`)
+      .expect(200);
+    assert.deepEqual(detail.body.item.publicContact, {
+      telegram: "blizu_example",
+      viber: "+38267555010",
+    });
+    const search = await guest
+      .get("/api/listings")
+      .query({ q: input.title })
+      .expect(200);
+    assert.equal(search.body.items.length, 2);
+    assert.ok(
+      search.body.items.every(
+        (item: { publicContact?: unknown }) => !item.publicContact,
+      ),
+    );
   } finally {
     f.cleanup();
   }

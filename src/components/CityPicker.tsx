@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Check, ChevronDown, MapPin } from "lucide-react";
 import { CITIES } from "../../shared/types";
 import { useI18n } from "../lib";
+import { cityName } from "../market-copy";
 
 const allCities = "Вся Черногория";
 const cities = [allCities, ...CITIES.filter((city) => city !== allCities)];
@@ -13,7 +14,7 @@ export function CityPicker({
   city: string;
   onChange: (city: string) => void;
 }) {
-  const { t } = useI18n();
+  const { language } = useI18n();
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -21,7 +22,7 @@ export function CityPicker({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const current = Math.max(0, cities.indexOf(city));
-  const label = (value: string) => (value === allCities ? t.everywhere : value);
+  const label = (value: string) => cityName(value, language);
   const show = (index = current) => {
     setActive(index);
     setOpen(true);

@@ -1,4 +1,10 @@
-import { lazy, Suspense, useState, type FormEvent } from "react";
+import {
+  lazy,
+  Suspense,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -13,8 +19,71 @@ import {
 import type { CreateAction } from "./App";
 import { Accordion } from "./components/Accordion";
 import { BrandIllustration } from "./components/BrandIllustration";
+import { useI18n } from "./lib";
 
 const ParticleScene = lazy(() => import("./components/Particles"));
+const wideScreen = "(min-width: 761px)";
+const isWideScreen = () => matchMedia(wideScreen).matches;
+function observeScreen(onChange: () => void) {
+  const media = matchMedia(wideScreen);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+const deliveryCopy = {
+  ru: {
+    title: "Важное —",
+    subtitle: "ближе, чем кажется.",
+    intro:
+      "Любимая вещь из России, Китая или Европы. Найдите логиста, сравните условия и договоритесь о доставке в Черногорию.",
+    form: "Заявка на доставку",
+    product: "Что хотите доставить?",
+    productLink: "Ссылка на покупку",
+    placeholder: "Вставьте ссылку на товар",
+    origin: "Откуда",
+    originLabel: "Страна отправления",
+    countries: ["Россия", "Китай", "Европа", "Другая страна"],
+    submit: "Получить предложения",
+    help: "Сначала условия и цена. Затем — ваше решение.",
+    temu: "Объявления о закупках на Temu",
+    invalidUrl:
+      "Добавьте ссылку на товар, начинающуюся с https:// или http://.",
+  },
+  en: {
+    title: "Your next purchase",
+    subtitle: "is closer than you think.",
+    intro:
+      "Find a delivery provider, compare quotes and arrange delivery to Montenegro.",
+    form: "Delivery request",
+    product: "What would you like delivered?",
+    productLink: "Product link",
+    placeholder: "Paste a product link",
+    origin: "From",
+    originLabel: "Country of dispatch",
+    countries: ["Russia", "China", "Europe", "Another country"],
+    submit: "Get delivery quotes",
+    help: "Review the price and terms before you decide.",
+    temu: "Find Temu group-buy listings",
+    invalidUrl: "Enter a product link starting with https:// or http://.",
+  },
+  me: {
+    title: "Ono što vam treba",
+    subtitle: "bliže je nego što mislite.",
+    intro:
+      "Pronađite dostavljača, uporedite ponude i dogovorite dostavu u Crnu Goru.",
+    form: "Zahtjev za dostavu",
+    product: "Šta želite da vam dostave?",
+    productLink: "Link do proizvoda",
+    placeholder: "Unesite link do proizvoda",
+    origin: "Odakle",
+    originLabel: "Zemlja slanja",
+    countries: ["Rusija", "Kina", "Evropa", "Druga zemlja"],
+    submit: "Zatražite ponude",
+    help: "Pregledajte cijenu i uslove prije odluke.",
+    temu: "Oglasi za zajedničku kupovinu na Temuu",
+    invalidUrl:
+      "Unesite link do proizvoda koji počinje sa https:// ili http://.",
+  },
+};
 
 const steps = [
   {
@@ -58,6 +127,9 @@ const answers = [
 ];
 
 export function DeliveryPage({ create }: { create: CreateAction }) {
+  const { language, t } = useI18n();
+  const showVisual = useSyncExternalStore(observeScreen, isWideScreen);
+  const copy = deliveryCopy[language];
   const [productUrl, setProductUrl] = useState("");
   const [origin, setOrigin] = useState("Европа");
   const [error, setError] = useState("");
@@ -69,36 +141,37 @@ export function DeliveryPage({ create }: { create: CreateAction }) {
       setError("");
       create("delivery", { productUrl: url.href, origin });
     } catch {
-      setError(
-        "Добавьте ссылку на товар, начинающуюся с https:// или http://.",
-      );
+      setError(copy.invalidUrl);
     }
   }
   return (
     <div className="page-shell delivery-page refined-page">
       <div className="page-breadcrumb">
-        <Link to="/">Главная</Link>
+        <Link to="/">{t.home}</Link>
         <span>/</span>
-        <span>Доставка</span>
+        <span>{t.delivery}</span>
       </div>
       <section className="delivery-intro" aria-labelledby="delivery-title">
         <div className="delivery-intro-copy">
           <span className="section-kicker">ИЗ ДРУГИХ СТРАН — К ВАМ ДОМОЙ</span>
           <h1 id="delivery-title">
-            Важное —<br />
-            <em>ближе, чем кажется.</em>
+            <span className="desktop-delivery-title">
+              {copy.title}
+              <br />
+              <em>{copy.subtitle}</em>
+            </span>
+            <span className="mobile-delivery-title">
+              {t.deliveryMarketplaces}
+            </span>
           </h1>
-          <p>
-            Любимая вещь из России, Китая или Европы. Найдите логиста, сравните
-            условия и договоритесь о доставке в Черногорию.
-          </p>
+          <p>{copy.intro}</p>
           <form
             className="delivery-quote glass-panel"
             onSubmit={submit}
-            aria-label="Заявка на доставку"
+            aria-label={copy.form}
           >
             <label className="quote-url">
-              <span>Что хотите доставить?</span>
+              <span>{copy.product}</span>
               <div>
                 <Link2 size={18} />
                 <input
@@ -111,8 +184,10 @@ export function DeliveryPage({ create }: { create: CreateAction }) {
                     setProductUrl(e.target.value);
                     setError("");
                   }}
-                  placeholder="Вставьте ссылку на товар"
-                  aria-label="Ссылка на покупку"
+                  placeholder={copy.placeholder}
+                  aria-label={copy.productLink}
+                  autoCapitalize="none"
+                  enterKeyHint="go"
                   aria-describedby={error ? "quote-error" : "quote-help"}
                   aria-invalid={!!error}
                 />
@@ -120,20 +195,23 @@ export function DeliveryPage({ create }: { create: CreateAction }) {
             </label>
             <div className="quote-bottom">
               <label>
-                <span>Откуда</span>
+                <span>{copy.origin}</span>
                 <select
-                  aria-label="Страна отправления"
+                  aria-label={copy.originLabel}
                   value={origin}
                   onChange={(e) => setOrigin(e.target.value)}
                 >
-                  <option>Россия</option>
-                  <option>Китай</option>
-                  <option>Европа</option>
-                  <option>Другая страна</option>
+                  {["Россия", "Китай", "Европа", "Другая страна"].map(
+                    (value, index) => (
+                      <option key={value} value={value}>
+                        {copy.countries[index]}
+                      </option>
+                    ),
+                  )}
                 </select>
               </label>
               <button className="button primary" type="submit">
-                Получить предложения
+                {copy.submit}
                 <ArrowRight size={17} />
               </button>
             </div>
@@ -145,8 +223,11 @@ export function DeliveryPage({ create }: { create: CreateAction }) {
           </form>
           <p className="quote-help" id="quote-help">
             <ShieldCheck size={14} />
-            Сначала условия и цена. Затем — ваше решение.
+            {copy.help}
           </p>
+          <Link className="quiet-link delivery-temu-link" to="/?q=Temu#catalog">
+            {copy.temu} <ArrowUpRight size={16} />
+          </Link>
         </div>
         <div
           className="delivery-visual"
@@ -156,17 +237,19 @@ export function DeliveryPage({ create }: { create: CreateAction }) {
             <span className="tiny-label">ДАЛЬШЕ — ТОЛЬКО ПУТЬ</span>
             <span>RU · CN · EU → ME</span>
           </div>
-          <div className="parcel-art refined-parcel" aria-hidden="true">
-            <Suspense
-              fallback={
-                <div className="parcel-fallback">
-                  <Package size={90} strokeWidth={0.8} />
-                </div>
-              }
-            >
-              <ParticleScene variant="delivery" />
-            </Suspense>
-          </div>
+          {showVisual && (
+            <div className="parcel-art refined-parcel" aria-hidden="true">
+              <Suspense
+                fallback={
+                  <div className="parcel-fallback">
+                    <Package size={90} strokeWidth={0.8} />
+                  </div>
+                }
+              >
+                <ParticleScene variant="delivery" />
+              </Suspense>
+            </div>
+          )}
           <div className="delivery-destination glass-panel">
             <span className="destination-mark">
               <Package size={21} strokeWidth={1.4} />

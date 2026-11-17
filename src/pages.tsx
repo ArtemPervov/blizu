@@ -1,5 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -20,6 +25,7 @@ import {
   Package,
   Plus,
   Send,
+  Share2,
   ShieldCheck,
   Star,
   Truck,
@@ -36,12 +42,13 @@ import {
   type OrderStatus,
   type ServiceRequest,
 } from "../shared/types";
-import { api, date, euro, json, useAuth, useToast } from "./lib";
+import { api, date, euro, json, useAuth, useI18n, useToast } from "./lib";
 import {
   Empty,
   ErrorState,
   Field,
   FormError,
+  ListingCard,
   Loading,
   Modal,
 } from "./components/ui";
@@ -54,6 +61,7 @@ import { ReportButton, type ReportTarget } from "./components/ReportButton";
 import { ListingGallery } from "./components/ListingGallery";
 import { listingAuthor, listingCity } from "./listing-format";
 import { useListingFavorite } from "./listing-favorite";
+import { categoryName, cityName } from "./market-copy";
 
 function LoginRequired({ onLogin }: { onLogin: () => void }) {
   return (
@@ -133,11 +141,14 @@ export function RequestsPage({
   city,
   setCity,
   create,
+  deliveryEnabled,
 }: {
   city: string;
   setCity: (value: string) => void;
   create: CreateAction;
+  deliveryEnabled: boolean;
 }) {
+  const { language } = useI18n();
   const [category, setCategory] = useState("all");
   const [kind, setKind] = useState("");
   const query = new URLSearchParams({
@@ -167,22 +178,24 @@ export function RequestsPage({
         </button>
       </div>
       <div className="filter-bar">
-        <div className="pill-tabs">
-          {[
-            ["", "Все заявки"],
-            ["service", "Услуги"],
-            ["delivery", "Доставка"],
-          ].map(([value, label]) => (
-            <button
-              className={kind === value ? "active" : ""}
-              aria-pressed={kind === value}
-              key={value}
-              onClick={() => setKind(value)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {deliveryEnabled && (
+          <div className="pill-tabs">
+            {[
+              ["", "Все заявки"],
+              ["service", "Услуги"],
+              ["delivery", "Доставка"],
+            ].map(([value, label]) => (
+              <button
+                className={kind === value ? "active" : ""}
+                aria-pressed={kind === value}
+                key={value}
+                onClick={() => setKind(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <div
           className="filter-bar-selects"
           role="group"
@@ -195,7 +208,7 @@ export function RequestsPage({
           >
             {CATEGORIES.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {categoryName(c.id, language)}
               </option>
             ))}
           </select>
@@ -205,7 +218,9 @@ export function RequestsPage({
             onChange={(e) => setCity(e.target.value)}
           >
             {CITIES.map((c) => (
-              <option key={c}>{c}</option>
+              <option key={c} value={c}>
+                {cityName(c, language)}
+              </option>
             ))}
           </select>
         </div>
@@ -554,19 +569,116 @@ function ListingDetail({
   report: (target: ReportTarget) => void;
 }) {
   const { user } = useAuth();
+  const toast = useToast();
+  const { language, t } = useI18n();
+  const { state } = useLocation();
+  const navigate = useNavigate();
+  const [shareUrl, setShareUrl] = useState("");
+  const from =
+    typeof state?.from === "string" &&
+    /^\/(?:favorites|dashboard|operator|listings\/[^/?#]+)?(?:[?#]|$)/.test(
+      state.from,
+    )
+      ? state.from
+      : null;
+  const fromSimilarListing = from?.startsWith("/listings/");
   const favorite = useListingFavorite(listing);
   const source = listing.source;
   const author = listingAuthor(listing);
-  const category = CATEGORIES.find(
-    (item) => item.id === listing.category,
-  )?.name;
+  const category = categoryName(listing.category, language);
+  const contact = listing.publicContact;
+  const price = source?.priceLabel ?? euro(listing.price);
   const tags = listing.tags.filter((tag) => !source || tag !== "Из Telegram");
+  const visible = !listing.hidden && !listing.ownerBlocked;
+  const favoriteProps = {
+    "aria-pressed": favorite.saved,
+    "aria-label": favorite.saved ? "Убрать из избранного" : "В избранное",
+    "aria-busy": favorite.busy,
+    disabled: favorite.busy,
+    onClick: favorite.toggle,
+  };
+  const priceClass = `listing-detail-price${source && !source.priceKnown ? " is-text" : ""}`;
+  const priceContent = (
+    <>
+      {price}
+      {!source && <small> / {listing.unit}</small>}
+    </>
+  );
+  async function shareListing() {
+    const url = new URL(
+      `/listings/${encodeURIComponent(listing.id)}`,
+      window.location.origin,
+    ).href;
+    try {
+      if (navigator.share) await navigator.share({ title: listing.title, url });
+      else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        toast(t.linkCopied, "success");
+      } else setShareUrl(url);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError"))
+        setShareUrl(url);
+    }
+  }
   return (
     <div className="page-shell listing-detail-page">
-      <Link className="back-link listing-detail-back" to="/">
-        <ArrowLeft size={16} /> Все предложения
-      </Link>
+      <div className="listing-detail-toolbar">
+        <Link
+          className="back-link listing-detail-back"
+          to={from ?? "/"}
+          state={from && { restoreListing: listing.id }}
+          replace={!!from}
+          onClick={(event) => {
+            if (
+              !fromSimilarListing ||
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.altKey ||
+              event.shiftKey
+            )
+              return;
+            event.preventDefault();
+            navigate(-1);
+          }}
+        >
+          <ArrowLeft size={16} aria-hidden="true" />{" "}
+          {from?.startsWith("/favorites")
+            ? t.backToSaved
+            : fromSimilarListing
+              ? t.listingBack
+              : from
+                ? t.backToList
+                : t.all}
+        </Link>
+        {visible && (
+          <div className="listing-detail-quick-actions">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={t.shareListing}
+              onClick={shareListing}
+            >
+              <Share2 size={20} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="icon-button listing-detail-save"
+              {...favoriteProps}
+            >
+              <Heart
+                size={21}
+                fill={favorite.saved ? "currentColor" : "none"}
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+        )}
+      </div>
       <header className="listing-detail-heading">
+        <p className={`${priceClass} mobile-listing-detail-price`}>
+          {priceContent}
+        </p>
         <p className="listing-detail-kicker">
           {category ?? "Местное предложение"}
         </p>
@@ -574,7 +686,7 @@ function ListingDetail({
         <div className="listing-detail-meta">
           <span>
             <MapPin size={15} />
-            {listingCity(listing)}
+            {cityName(listingCity(listing, t.searchCityUnknown), language)}
           </span>
           {source ? (
             <span className="listing-detail-source">
@@ -594,6 +706,9 @@ function ListingDetail({
             <Clock3 size={14} />
             {date(listing.createdAt)}
           </time>
+          {!source && listing.providerId.startsWith("demo-") && (
+            <span className="listing-demo-label">{t.demoLabel}</span>
+          )}
         </div>
       </header>
       {listing.hidden && (
@@ -616,45 +731,65 @@ function ListingDetail({
           <p className="listing-detail-price-label">
             {source ? "Условия автора" : "Стоимость от"}
           </p>
-          <p
-            className={
-              source && !source.priceKnown
-                ? "listing-detail-price is-text"
-                : "listing-detail-price"
-            }
-          >
-            {source ? source.priceLabel : euro(listing.price)}
-            {!source && <small> / {listing.unit}</small>}
-          </p>
+          <p className={priceClass}>{priceContent}</p>
           <div className="listing-detail-actions">
-            {source ? (
-              <a
-                className="button primary full"
-                href={source.url}
-                target="_blank"
-                rel="noopener noreferrer"
+            <div className="listing-primary-action">
+              <strong className="listing-action-price">{price}</strong>
+              {source ? (
+                <a
+                  className="button primary full"
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {t.openTelegram} <ExternalLink size={17} />
+                </a>
+              ) : contact ? (
+                <a className="button primary full" href="#listing-contacts">
+                  {t.contactSeller} <MessageCircle size={17} />
+                </a>
+              ) : (
+                <button
+                  className="button primary full"
+                  onClick={() => create("request", listing)}
+                >
+                  {t.newRequest} <ArrowUpRight size={18} />
+                </button>
+              )}
+            </div>
+            {contact && (
+              <div
+                id="listing-contacts"
+                className="listing-messenger-links"
+                tabIndex={-1}
+                aria-label={t.contactSeller}
               >
-                Открыть в Telegram <ExternalLink size={17} />
-              </a>
-            ) : (
-              <button
-                className="button primary full"
-                onClick={() => create("request", listing)}
-              >
-                Создать заявку <ArrowUpRight size={18} />
-              </button>
+                {contact.viber && (
+                  <a
+                    className="button secondary"
+                    href={`viber://chat?number=${encodeURIComponent(contact.viber)}`}
+                  >
+                    <MessageCircle size={17} /> Viber
+                    <span>{contact.viber}</span>
+                  </a>
+                )}
+                {contact.telegram && (
+                  <a
+                    className="button secondary"
+                    href={`https://t.me/${contact.telegram}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Send size={17} /> Telegram
+                  </a>
+                )}
+              </div>
             )}
-            {!listing.hidden && !listing.ownerBlocked && (
+            {visible && (
               <button
                 className="button secondary full listing-detail-save"
                 type="button"
-                aria-pressed={favorite.saved}
-                aria-label={
-                  favorite.saved ? "Убрать из избранного" : "В избранное"
-                }
-                aria-busy={favorite.busy}
-                disabled={favorite.busy}
-                onClick={favorite.toggle}
+                {...favoriteProps}
               >
                 <Heart
                   size={17}
@@ -686,11 +821,13 @@ function ListingDetail({
               </span>
             </div>
           </div>
-          <p className="listing-detail-hint">
-            {source
-              ? "Наличие и условия можно уточнить у автора в оригинальной публикации."
-              : "Исполнители пришлют отклики на заявку. Контакты откроются после выбора исполнителя."}
-          </p>
+          {!contact && (
+            <p className="listing-detail-hint">
+              {source
+                ? "Наличие и условия можно уточнить у автора в оригинальной публикации."
+                : "Исполнители пришлют отклики на заявку. Контакты откроются после выбора исполнителя."}
+            </p>
+          )}
           {!source && (
             <ReportButton
               targetType="user"
@@ -743,7 +880,58 @@ function ListingDetail({
           </div>
         </section>
       </div>
+      {visible && <SimilarListings listing={listing} />}
+      {shareUrl && (
+        <Modal title={t.shareListing} onClose={() => setShareUrl("")}>
+          <Field label={t.listingLink}>
+            <input
+              value={shareUrl}
+              readOnly
+              onFocus={(event) => event.currentTarget.select()}
+            />
+          </Field>
+        </Modal>
+      )}
     </div>
+  );
+}
+
+const mobileListingQuery = "(max-width: 760px)";
+const isMobileListing = () => window.matchMedia(mobileListingQuery).matches;
+function subscribeMobileListing(onChange: () => void) {
+  const query = window.matchMedia(mobileListingQuery);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function SimilarListings({ listing }: { listing: Listing }) {
+  const { t } = useI18n();
+  const mobile = useSyncExternalStore(subscribeMobileListing, isMobileListing);
+  const { data } = useQuery({
+    queryKey: ["similar-listings", listing.category],
+    queryFn: () =>
+      api<{ items: Listing[] }>(
+        `/listings?${new URLSearchParams({ category: listing.category, limit: "5" })}`,
+      ),
+    enabled: mobile,
+  });
+  if (!mobile) return null;
+  const items = data?.items
+    .filter((item) => item.id !== listing.id)
+    .slice(0, 4);
+  if (!items?.length) return null;
+  return (
+    <section
+      className="listing-detail-related"
+      aria-labelledby="listing-related-title"
+    >
+      <h2 id="listing-related-title">{t.similarListings}</h2>
+      <div className="listing-detail-related-grid">
+        {items.map((item) => (
+          <ListingCard key={item.id} listing={item} />
+        ))}
+      </div>
+    </section>
   );
 }
 

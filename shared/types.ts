@@ -65,9 +65,9 @@ export const CATEGORIES = [
   },
   {
     id: "delivery",
-    name: "Доставка и посылки",
-    en: "Delivery & parcels",
-    sr: "Dostava i paketi",
+    name: "Помощь с заказами",
+    en: "Help with orders",
+    sr: "Pomoć pri naručivanju",
     icon: "package",
   },
 ] as const;
@@ -103,6 +103,7 @@ export type Listing = {
   moderationReason?: string;
   ownerBlocked?: boolean;
   source?: ListingSource;
+  publicContact?: { telegram: string; viber: string };
 };
 export type ListingSource = {
   kind: "telegram";

@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
 import type { Listing } from "../../shared/types";
 import { ListingPhoto, listingPhotos, photoPlaceholder } from "./ListingPhoto";
@@ -7,6 +7,10 @@ import { Modal } from "./ui";
 export function ListingGallery({ listing }: { listing: Listing }) {
   const [selected, setSelected] = useState(0);
   const [expanded, setExpanded] = useState(false);
+  const pointerStart = useRef<{ id: number; x: number; y: number } | null>(
+    null,
+  );
+  const swiped = useRef(false);
   const photos = listingPhotos(listing);
   const index = Math.min(selected, photos.length - 1);
   const photo = photos[index];
@@ -14,6 +18,23 @@ export function ListingGallery({ listing }: { listing: Listing }) {
   const alt = `${listing.title}${multiple ? ` · фото ${index + 1}` : ""}`;
   const move = (direction: number) =>
     setSelected((index + direction + photos.length) % photos.length);
+  const startSwipe = (event: PointerEvent) => {
+    swiped.current = false;
+    pointerStart.current =
+      multiple && event.pointerType === "touch" && event.isPrimary
+        ? { id: event.pointerId, x: event.clientX, y: event.clientY }
+        : null;
+  };
+  const endSwipe = (event: PointerEvent) => {
+    const start = pointerStart.current;
+    pointerStart.current = null;
+    if (!start || start.id !== event.pointerId) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dx) < 36 || Math.abs(dx) <= Math.abs(dy) * 1.25) return;
+    swiped.current = true;
+    move(dx < 0 ? 1 : -1);
+  };
   const handleKeys = (event: KeyboardEvent) => {
     if (!multiple || event.altKey || event.ctrlKey || event.metaKey) return;
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -43,13 +64,23 @@ export function ListingGallery({ listing }: { listing: Listing }) {
       aria-label="Фотографии объявления"
       onKeyDown={handleKeys}
     >
-      <div className="listing-photo-frame listing-gallery-stage">
+      <div
+        className="listing-photo-frame listing-gallery-stage"
+        onPointerDown={startSwipe}
+        onPointerUp={endSwipe}
+        onPointerCancel={() => {
+          pointerStart.current = null;
+        }}
+      >
         <ListingPhoto src={photo} alt={alt} loading="eager" backdrop />
         {photo !== photoPlaceholder && (
           <button
             className="listing-gallery-expand"
             type="button"
-            onClick={() => setExpanded(true)}
+            onClick={(event) => {
+              if (event.detail === 0 || !swiped.current) setExpanded(true);
+              swiped.current = false;
+            }}
             aria-label="Увеличить фото"
           >
             <Maximize2 size={19} />

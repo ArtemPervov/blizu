@@ -225,10 +225,12 @@ export function CreateModal({
   kind: initialKind,
   preset,
   onClose,
+  deliveryEnabled,
 }: {
   kind: CreateKind;
   preset?: CreatePreset;
   onClose: () => void;
+  deliveryEnabled: boolean;
 }) {
   const { user } = useAuth();
   const [kind, setKind] = useState(initialKind);
@@ -329,18 +331,20 @@ export function CreateModal({
           <Wrench size={16} />
           Заявка
         </button>
-        <button
-          disabled={mutation.isPending}
-          className={kind === "delivery" ? "active" : ""}
-          aria-pressed={kind === "delivery"}
-          onClick={() => {
-            setKind("delivery");
-            mutation.reset();
-          }}
-        >
-          <Package size={16} />
-          Доставка
-        </button>
+        {deliveryEnabled && (
+          <button
+            disabled={mutation.isPending}
+            className={kind === "delivery" ? "active" : ""}
+            aria-pressed={kind === "delivery"}
+            onClick={() => {
+              setKind("delivery");
+              mutation.reset();
+            }}
+          >
+            <Package size={16} />
+            Доставка
+          </button>
+        )}
         {user?.role === "provider" && (
           <button
             disabled={mutation.isPending}
@@ -512,6 +516,36 @@ export function CreateModal({
             </Field>
           )}
         </div>
+        {kind === "listing" && (
+          <fieldset className="listing-contact-fields">
+            <legend>Контакты в объявлении</legend>
+            <p>
+              Указывайте только те контакты, которые хотите показать всем
+              посетителям.
+            </p>
+            <div className="form-row">
+              <Field label="Telegram">
+                <input
+                  name="telegram"
+                  placeholder="@username"
+                  defaultValue={draft.telegram ?? ""}
+                  maxLength={33}
+                  autoCapitalize="none"
+                  spellCheck={false}
+                />
+              </Field>
+              <Field label="Viber">
+                <input
+                  type="tel"
+                  name="viber"
+                  placeholder="+382…"
+                  defaultValue={draft.viber ?? ""}
+                  maxLength={32}
+                />
+              </Field>
+            </div>
+          </fieldset>
+        )}
         <div className="form-note">
           <ShieldCheck size={19} />
           <p>

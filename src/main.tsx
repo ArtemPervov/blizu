@@ -13,6 +13,7 @@ import "./controls.css";
 import "./telegram.css";
 import "./listing-cards.css";
 import "./listing-detail.css";
+import "./mobile.css";
 import { MarketProvider } from "./market-state";
 const queryClient = new QueryClient({
   defaultOptions: {
