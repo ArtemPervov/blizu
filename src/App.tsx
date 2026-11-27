@@ -503,7 +503,10 @@ export default function App() {
       </nav>
       <CompareTray />
       {meta?.assistantEnabled && (
-        <AssistantWidget openOnLoad={location.state?.openAssistant === true} />
+        <AssistantWidget
+          openOnLoad={location.state?.openAssistant === true}
+          editListing={(preset) => createAction("listing", preset)}
+        />
       )}
       <footer className="site-footer">
         <div className="footer-main">

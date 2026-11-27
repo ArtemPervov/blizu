@@ -102,6 +102,43 @@ body:has(.compare-tray) .assistant-widget {
   gap: 8px;
 }
 
+.assistant-results {
+  display: grid;
+  gap: 6px;
+}
+
+.assistant-result {
+  display: grid;
+  gap: 4px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+a.assistant-result:hover {
+  background: var(--surface-subtle);
+}
+
+.assistant-result span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.assistant-result-catalog {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  color: var(--accent-strong);
+}
+
+.assistant-result-edit {
+  justify-self: start;
+}
+
 .assistant-chat :is(.assistant-answer, .assistant-question) {
   width: fit-content;
   max-width: min(92%, 60ch);

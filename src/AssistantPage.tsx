@@ -1,17 +1,25 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { ArrowUp, Sparkles, X } from "lucide-react";
-import { Link } from "react-router-dom";
-import { chatStreamType, readJsonLines } from "../shared/assistant-stream";
-import { json, useI18n } from "./lib";
+import { ArrowUp, ArrowUpRight, Sparkles, X } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  chatStreamType,
+  readJsonLines,
+  type CatalogFilters,
+  type ChatAction,
+  type ChatResult,
+  type ListingDraft,
+} from "../shared/assistant-stream";
+import { euro, json, useI18n } from "./lib";
+import { cityName } from "./market-copy";
 
 const copy = {
   ru: {
     title: "AI помощник",
-    intro: "Подскажу, как пользоваться Blizu.",
+    intro: "Найду объявления и помогу разместить ваше.",
     questions: [
-      "Как добавить объявление?",
+      "Найди объявление по авто",
+      "Хочу разместить объявление",
       "Где посмотреть мои заказы?",
-      "Как написать автору?",
     ],
     input: "Ваш вопрос",
     send: "Отправить",
@@ -20,14 +28,17 @@ const copy = {
     close: "Закрыть чат",
     catalog: "Каталог",
     orders: "Мои заказы",
+    openCatalog: "Открыть каталог",
+    editListing: "Проверить и опубликовать",
+    priceUnknown: "Цена не указана",
   },
   en: {
     title: "AI assistant",
-    intro: "Ask me how to use Blizu.",
+    intro: "Find listings and prepare your own.",
     questions: [
-      "How do I post a listing?",
+      "Find listings for cars",
+      "I want to post a listing",
       "Where are my orders?",
-      "How do I message a seller?",
     ],
     input: "Your question",
     send: "Send",
@@ -36,14 +47,17 @@ const copy = {
     close: "Close chat",
     catalog: "Catalog",
     orders: "My orders",
+    openCatalog: "Open catalog",
+    editListing: "Review and publish",
+    priceUnknown: "Price not listed",
   },
   me: {
     title: "AI pomoćnik",
-    intro: "Pitajte me kako se koristi Blizu.",
+    intro: "Pronađite oglase i pripremite svoj.",
     questions: [
-      "Kako da objavim oglas?",
+      "Pronađi oglase za vozila",
+      "Želim da objavim oglas",
       "Gdje su moje narudžbe?",
-      "Kako da pišem prodavcu?",
     ],
     input: "Vaše pitanje",
     send: "Pošalji",
@@ -52,10 +66,21 @@ const copy = {
     close: "Zatvori razgovor",
     catalog: "Katalog",
     orders: "Moje narudžbe",
+    openCatalog: "Otvori katalog",
+    editListing: "Provjeri i objavi",
+    priceUnknown: "Cijena nije navedena",
   },
 };
 
-export function AssistantWidget({ openOnLoad }: { openOnLoad: boolean }) {
+type EditListing = (preset: ListingDraft & { id: string }) => void;
+
+export function AssistantWidget({
+  openOnLoad,
+  editListing,
+}: {
+  openOnLoad: boolean;
+  editListing: EditListing;
+}) {
   const { language } = useI18n();
   const text = copy[language];
   const [open, setOpen] = useState(openOnLoad);
@@ -118,23 +143,36 @@ export function AssistantWidget({ openOnLoad }: { openOnLoad: boolean }) {
             <X size={18} aria-hidden="true" />
           </button>
         </header>
-        <AssistantChat visible={open} close={close} />
+        <AssistantChat visible={open} close={close} editListing={editListing} />
       </section>
     </div>
   );
 }
 
-type Turn = { question: string; answer: string };
+type Turn = ChatResult & { question: string };
+
+function catalogHref(filters: CatalogFilters) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") search.set(key, String(value));
+  }
+  return `/${search.size ? `?${search}` : ""}#catalog`;
+}
+
+const listingHref = (id: string) => `/listings/${encodeURIComponent(id)}`;
 
 function AssistantChat({
   visible,
   close,
+  editListing,
 }: {
   visible: boolean;
   close: () => void;
+  editListing: EditListing;
 }) {
   const { language } = useI18n();
   const text = copy[language];
+  const navigate = useNavigate();
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState("");
   const [attempt, setAttempt] = useState<Turn | null>(null);
@@ -175,6 +213,7 @@ function AssistantChat({
       if (!response.ok || !response.body)
         throw new Error("Chat request failed");
       let answer = "";
+      let action: ChatAction | undefined;
       let done = false;
       for await (const value of readJsonLines(response.body)) {
         if (controller.signal.aborted) return;
@@ -183,6 +222,12 @@ function AssistantChat({
         }
         if ("delta" in value && typeof value.delta === "string") {
           answer += value.delta;
+          setAttempt({ question: message, answer });
+        }
+        if ("result" in value) {
+          const result = value.result as ChatResult;
+          answer = result.answer;
+          action = result.action;
           setAttempt({ question: message, answer });
         }
         if ("done" in value && value.done === true) {
@@ -194,10 +239,22 @@ function AssistantChat({
       if (!done || !answer.trim()) throw new Error("Incomplete chat response");
       setTurns((previous) => [
         ...previous.slice(-19),
-        { question: message, answer },
+        { question: message, answer, action },
       ]);
       setAttempt(null);
       setStatus("idle");
+      if (
+        action?.kind === "catalog" &&
+        action.listings.length &&
+        /^(открой(?:те)?|open|otvori)\s/iu.test(message)
+      ) {
+        navigate(
+          action.total === 1
+            ? listingHref(action.listings[0].id)
+            : catalogHref(action.filters),
+        );
+        close();
+      }
     } catch {
       if (!controller.signal.aborted) {
         setQuestion(message);
@@ -244,10 +301,62 @@ function AssistantChat({
               24;
           }}
         >
-          {turns.map(({ question, answer }, index) => (
+          {turns.map(({ question, answer, action }, index) => (
             <div className="assistant-turn" key={index}>
               <p className="assistant-question">{question}</p>
               <p className="assistant-answer">{answer}</p>
+              {action?.kind === "catalog" && (
+                <div className="assistant-results">
+                  {action.listings.map((listing) => (
+                    <Link
+                      key={listing.id}
+                      to={listingHref(listing.id)}
+                      onClick={close}
+                      className="assistant-result"
+                    >
+                      <strong>{listing.title}</strong>
+                      <span>
+                        {cityName(listing.city, language)} ·{" "}
+                        {listing.price === null
+                          ? text.priceUnknown
+                          : euro(listing.price)}
+                      </span>
+                    </Link>
+                  ))}
+                  <Link
+                    className="assistant-result-catalog"
+                    to={catalogHref(action.filters)}
+                    onClick={close}
+                  >
+                    {text.openCatalog}
+                    <ArrowUpRight size={14} aria-hidden="true" />
+                  </Link>
+                </div>
+              )}
+              {action?.kind === "listingDraft" && (
+                <div className="assistant-results">
+                  <div className="assistant-result">
+                    <strong>{action.draft.title}</strong>
+                    <span>
+                      {cityName(action.draft.city, language)} ·{" "}
+                      {euro(action.draft.price)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="button secondary assistant-result-edit"
+                    onClick={() => {
+                      close();
+                      editListing({
+                        ...action.draft,
+                        id: `assistant-${action.id}`,
+                      });
+                    }}
+                  >
+                    {text.editListing}
+                  </button>
+                </div>
+              )}
             </div>
           ))}
           {attempt && (

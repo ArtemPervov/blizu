@@ -250,6 +250,72 @@ test("Ollama chat works for guests, answers greetings locally and streams model 
   }
 });
 
+test("assistant uses the public catalog and prepares a listing without publishing it", async () => {
+  const calls: string[] = [];
+  const draft = {
+    title: "Городской велосипед",
+    description: "Продаю городской велосипед в хорошем состоянии.",
+    category: "goods",
+    city: "Бар",
+    price: 120,
+    unit: "товар",
+  };
+  const upstream = createServer(async (req, res) => {
+    req.setEncoding("utf8");
+    let body = "";
+    for await (const part of req) body += part;
+    const { messages, tools, stream } = JSON.parse(body);
+    assert.ok(tools.some((tool: { function: { name: string } }) => tool.function.name === "search_catalog"));
+    const question = messages.at(-1).content as string;
+    calls.push(question);
+    const call = question.includes("велосипед")
+      ? { name: "prepare_listing", arguments: draft }
+      : { name: "search_catalog", arguments: { category: "auto", city: "Будва", q: "Skoda", maxPrice: 5000 } };
+    const reply = { done: true, message: { content: "", tool_calls: [{ function: call }] } };
+    res.setHeader("Content-Type", stream ? chatStreamType : "application/json");
+    res.end(JSON.stringify(reply) + (stream ? "\n" : ""));
+  });
+  upstream.listen(0, "127.0.0.1");
+  await once(upstream, "listening");
+  const address = upstream.address();
+  assert.ok(address && typeof address === "object");
+  const f = fixture(true, false, {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    model: "qwen3:8b",
+    timeoutMs: 5000,
+  });
+  try {
+    const author = await login(f.app, "provider");
+    const offer = { ...draft, title: "Skoda Fabia", category: "auto", city: "Будва", price: 4600 };
+    const published = await author.post("/api/listings").send(offer).expect(201);
+    const overBudget = await author.post("/api/listings").send({ ...offer, price: 5100 }).expect(201);
+    const guest = request(f.app);
+    const send = (message: string) => guest.post("/api/assistant/chat").send({ language: "ru", message });
+    const simple = (await send("найди объявление по авто").expect(200)).body.action;
+    assert.equal(simple.kind, "catalog");
+    assert.deepEqual(simple.filters, { category: "auto" });
+    assert.equal(calls.length, 0);
+
+    const found = (await send("Найди Skoda в Будве до 5000 €").expect(200)).body.action;
+    assert.deepEqual(found.listings.map((item: { id: string }) => item.id), [published.body.id]);
+    assert.ok(!found.listings.some((item: { id: string }) => item.id === overBudget.body.id));
+
+    const prepared = await send("Размести городской велосипед в Баре за 120 €")
+      .set("Accept", chatStreamType)
+      .expect(200);
+    const events = prepared.text.trim().split("\n").map((line: string) => JSON.parse(line));
+    assert.equal(events[0].result.action.kind, "listingDraft");
+    assert.deepEqual(events[0].result.action.draft, draft);
+    assert.deepEqual(events[1], { done: true });
+    assert.equal(f.store.get("SELECT id FROM listings WHERE title=?", draft.title), undefined);
+    await guest.post("/api/listings").send(draft).expect(401);
+  } finally {
+    f.cleanup();
+    upstream.closeAllConnections();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+  }
+});
+
 test("MVP keeps local order help, excludes new international delivery, and seeds demos once", async () => {
   const f = fixture(true, false);
   try {

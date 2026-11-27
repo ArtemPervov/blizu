@@ -23,6 +23,7 @@ import {
   CITIES,
   STATUS_LABELS,
   type User,
+  type Listing,
   type Order,
   type OrderStatus,
   type ServiceRequest,
@@ -396,9 +397,7 @@ export function createApp(options: AppOptions = {}) {
     res.json({ ok: true });
   });
 
-  if (options.assistant) registerAssistant(app, options.assistant);
-
-  app.get("/api/listings", (req, res) => {
+  function findListings(query: unknown) {
     const input = z
       .object({
         q: z.string().max(200).optional(),
@@ -423,7 +422,7 @@ export function createApp(options: AppOptions = {}) {
           value.minPrice <= value.maxPrice,
         { message: "Минимальная цена не должна быть выше максимальной" },
       )
-      .parse(req.query);
+      .parse(query);
     const where = [publicListings];
     const params: (string | number)[] = [];
     if (input.source === "telegram")
@@ -489,16 +488,23 @@ export function createApp(options: AppOptions = {}) {
             : input.sort === "rating"
               ? "u.rating DESC,l.reviewCount DESC,l.id ASC"
               : `${demo ? "CASE WHEN u.id LIKE 'demo-%' THEN 1 ELSE 0 END ASC," : ""}u.rating DESC,l.reviewCount DESC,l.createdAt DESC,l.id ASC`;
-    let items: Record<string, unknown>[] = store
+    const items = store
       .all<
-        Record<string, unknown>
+        Omit<Listing, "tags" | "providerVerified"> & {
+          tags: string;
+          providerVerified: number;
+        }
       >(`${listingsSelect} WHERE ${where.join(" AND ")} ORDER BY ${ordering} LIMIT ? OFFSET ?`, ...params, input.limit, input.offset)
       .map((l) => ({
         ...l,
         tags: JSON.parse(String(l.tags)),
         providerVerified: Boolean(l.providerVerified),
       }));
-    res.json({ items: attachListingSources(store, items), total });
+    return { items: attachListingSources(store, items), total };
+  }
+  if (options.assistant) registerAssistant(app, options.assistant, findListings);
+  app.get("/api/listings", (req, res) => {
+    res.json(findListings(req.query));
   });
   app.get("/api/listings/:id", (req: AuthRequest, res) => {
     const item = store.get<Record<string, unknown>>(

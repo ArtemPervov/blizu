@@ -235,6 +235,93 @@ test("the guest assistant streams a reply without leaving the current page", asy
   assert.ok(await screen.findByText("Откройте раздел «Мои заказы»."));
 });
 
+test("guest assistant links to catalog matches and opens an explicit match", async () => {
+  const filters = { category: "auto" };
+  const { body } = await agent.get("/api/listings?category=auto").expect(200);
+  const listing = body.items[0];
+  assert.ok(listing);
+  const { id, title, city, price } = listing;
+  const baseFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    if (input === "/api/meta") {
+      const meta = await (await baseFetch(input, init)).json();
+      return Response.json({ ...meta, assistantEnabled: true });
+    }
+    if (input === "/api/assistant/chat") {
+      const result = {
+        answer: "Нашёл подходящие объявления в каталоге.",
+        action: {
+          kind: "catalog",
+          filters,
+          total: 1,
+          listings: [{ id, title, city, price }],
+        },
+      };
+      return new Response(JSON.stringify({ result }) + '\n{"done":true}\n', {
+        headers: { "Content-Type": "application/x-ndjson" },
+      });
+    }
+    return baseFetch(input, init);
+  };
+  mount("/requests");
+  const page = await screen.findByRole("heading", { level: 1 });
+  fireEvent.click(await screen.findByRole("button", { name: "AI помощник" }));
+  fireEvent.click(screen.getByRole("button", { name: "Найди объявление по авто" }));
+  const chat = within(screen.getByRole("dialog", { name: "AI помощник" }));
+  const result = await chat.findByRole("link", { name: (name) => name.startsWith(title) });
+  assert.equal(result.getAttribute("href"), '/listings/' + encodeURIComponent(id));
+  assert.equal(chat.getByRole("link", { name: "Открыть каталог" }).getAttribute("href"), "/?category=auto#catalog");
+  assert.equal(screen.getByRole("heading", { level: 1 }), page);
+  fireEvent.change(chat.getByRole("textbox", { name: "Ваш вопрос" }), {
+    target: { value: "Открой объявления по авто" },
+  });
+  fireEvent.click(chat.getByRole("button", { name: "Отправить" }));
+  await screen.findByRole("heading", { name: title, level: 1 });
+  assert.equal(screen.queryByRole("dialog", { name: "AI помощник" }), null);
+});
+
+test("assistant listing drafts prefill the regular publication form", async () => {
+  await agent.post("/api/auth/demo").send({ role: "provider" }).expect(200);
+  const draft = {
+    title: "Велосипед для города",
+    description: "Продаю велосипед в хорошем состоянии, есть подножка.",
+    category: "goods",
+    city: "Бар",
+    price: 120,
+    unit: "товар",
+  };
+  const baseFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    if (input === "/api/meta") {
+      const meta = await (await baseFetch(input, init)).json();
+      return Response.json({ ...meta, assistantEnabled: true });
+    }
+    if (input === "/api/assistant/chat") {
+      return new Response([
+        JSON.stringify({ result: {
+          answer: "Подготовил черновик.",
+          action: { kind: "listingDraft", draft, id: "test-draft" },
+        } }),
+        JSON.stringify({ done: true }),
+      ].join("\n") + "\n", { headers: { "Content-Type": "application/x-ndjson" } });
+    }
+    return baseFetch(input, init);
+  };
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "AI помощник" }));
+  fireEvent.click(screen.getByRole("button", { name: "Хочу разместить объявление" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Проверить и опубликовать" }));
+  const form = await screen.findByRole("dialog");
+  for (const [key, value] of Object.entries(draft)) {
+    const field = form.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[name="${key}"]`);
+    assert.equal(field?.value, String(value));
+  }
+  assert.equal(fixture.store.get("SELECT id FROM listings WHERE title=?", draft.title), undefined);
+  fireEvent.click(within(form).getByRole("button", { name: "Опубликовать предложение", exact: true }));
+  await screen.findByRole("heading", { name: draft.title, level: 1 });
+  assert.ok(fixture.store.get("SELECT id FROM listings WHERE title=?", draft.title));
+});
+
 test("the hero keeps a decorative contour background with reduced motion and leaves its title and search usable", async () => {
   const { container } = mount();
   await cards();

@@ -5,7 +5,15 @@ import {
   chatStreamType,
   readJsonLines,
   type ChatEvent,
+  type ChatResult,
 } from "../shared/assistant-stream.js";
+import {
+  assistantTools,
+  catalogResult,
+  findCategory,
+  runAssistantTool,
+  type FindCatalogListings,
+} from "./assistant-actions.js";
 import type { AuthRequest } from "./app.js";
 import { HttpError } from "./errors.js";
 
@@ -39,7 +47,18 @@ const chatInput = z.strictObject({
 });
 
 const modelReply = z.object({
-  message: z.object({ content: z.string() }).optional(),
+  message: z
+    .object({
+      content: z.string().optional(),
+      tool_calls: z
+        .array(
+          z.object({
+            function: z.object({ name: z.string(), arguments: z.unknown() }),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
   done: z.boolean().optional(),
   error: z.string().optional(),
 });
@@ -52,7 +71,7 @@ const greetings = {
   me: "Zdravo! Kako mogu da vam pomognem u Blizu?",
 };
 
-const instructions = `You answer questions about using Blizu, a marketplace for goods and services in Montenegro. Keep answers short and based on the facts below. If the facts do not cover a question, say so. Never claim to have opened a page, searched live listings, handled a dispute, or published anything. Do not ask for passwords or verification codes.
+const instructions = `You assist people on Blizu, a marketplace for goods and services in Montenegro. When asked to find or open listings, call search_catalog with the relevant filters. When asked to create or publish a listing, gather missing details and call prepare_listing. Do not announce results before using a tool. The user opens links or confirms publication in the interface. Keep guidance short and based on the facts below. Do not ask for passwords or verification codes.
 
 - "Services & goods" is the catalog. Use the search bar and filters for categories, cities and prices.
 - "Requests" contains tasks posted by people looking for help. An offer in the catalog describes what its author provides.
@@ -105,7 +124,21 @@ function writeEvent(res: Response, event: ChatEvent) {
   res.write(JSON.stringify(event) + "\n");
 }
 
-export function registerAssistant(app: Express, config: AssistantConfig) {
+function sendResult(res: Response, streaming: boolean, result: ChatResult) {
+  if (streaming) {
+    writeEvent(res, { result });
+    writeEvent(res, { done: true });
+    res.end();
+  } else {
+    res.json(result);
+  }
+}
+
+export function registerAssistant(
+  app: Express,
+  config: AssistantConfig,
+  findListings: FindCatalogListings,
+) {
   const endpoint = new URL("/api/chat", config.baseUrl);
   const limit = rateLimit({
     windowMs: 60_000,
@@ -135,6 +168,15 @@ export function registerAssistant(app: Express, config: AssistantConfig) {
       }
       return;
     }
+    const category = findCategory(input.message);
+    if (category) {
+      sendResult(
+        res,
+        streaming,
+        catalogResult(findListings, { category }, input.language),
+      );
+      return;
+    }
     if (running >= 2) {
       throw new HttpError(429, "Помощник занят. Попробуйте чуть позже.");
     }
@@ -160,6 +202,7 @@ export function registerAssistant(app: Express, config: AssistantConfig) {
             { role: "user", content: input.message },
           ],
           stream: streaming,
+          tools: assistantTools,
           think: false,
           keep_alive: "15m",
           options: { num_ctx: 4096, num_predict: 500 },
@@ -171,8 +214,19 @@ export function registerAssistant(app: Express, config: AssistantConfig) {
       }
       if (!streaming) {
         const { message, error } = modelReply.parse(await response.json());
-        if (error || !message?.content.trim())
-          throw new Error("Empty model response");
+        if (error) throw new Error("Ollama response failed");
+        for (const call of message?.tool_calls ?? []) {
+          const result = runAssistantTool(
+            call.function,
+            findListings,
+            input.language,
+          );
+          if (result) {
+            sendResult(res, streaming, result);
+            return;
+          }
+        }
+        if (!message?.content?.trim()) throw new Error("Empty model response");
         res.json({ answer: message.content.trim().slice(0, answerLimit) });
         return;
       }
@@ -182,7 +236,18 @@ export function registerAssistant(app: Express, config: AssistantConfig) {
       for await (const value of readJsonLines(response.body)) {
         const chunk = modelReply.parse(value);
         if (chunk.error) throw new Error("Ollama stream failed");
-        const delta = chunk.message?.content.slice(
+        for (const call of chunk.message?.tool_calls ?? []) {
+          const result = runAssistantTool(
+            call.function,
+            findListings,
+            input.language,
+          );
+          if (result) {
+            sendResult(res, streaming, result);
+            return;
+          }
+        }
+        const delta = chunk.message?.content?.slice(
           0,
           answerLimit - answer.length,
         );

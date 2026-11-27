@@ -1,6 +1,52 @@
 export const chatStreamType = "application/x-ndjson";
 
-export type ChatEvent = { delta: string } | { done: true } | { error: string };
+export type CatalogFilters = {
+  category?: string;
+  city?: string;
+  q?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  sort?: "recommended" | "newest" | "price" | "price_desc" | "rating";
+};
+
+export const listingPriceUnits = [
+  "услуга",
+  "час",
+  "порция",
+  "товар",
+  "кг",
+  "консультация",
+] as const;
+
+export type ListingDraft = {
+  title: string;
+  description: string;
+  category: string;
+  city: string;
+  price: number;
+  unit: (typeof listingPriceUnits)[number];
+};
+
+export type ChatAction =
+  | {
+      kind: "catalog";
+      filters: CatalogFilters;
+      total: number;
+      listings: {
+        id: string;
+        title: string;
+        city: string;
+        price: number | null;
+      }[];
+    }
+  | { kind: "listingDraft"; id: string; draft: ListingDraft };
+
+export type ChatResult = { answer: string; action?: ChatAction };
+export type ChatEvent =
+  | { delta: string }
+  | { result: ChatResult }
+  | { done: true }
+  | { error: string };
 
 export async function* readJsonLines(body: ReadableStream<Uint8Array>) {
   const reader = body.getReader();

@@ -440,7 +440,11 @@ export function CreateModal({
         >
           <textarea
             name="description"
-            defaultValue={draft.description ?? ""}
+            defaultValue={
+              draft.description ??
+              (kind === "listing" ? preset?.description : undefined) ??
+              ""
+            }
             required
             minLength={kind === "listing" ? 20 : 15}
             maxLength={5000}
@@ -505,7 +509,10 @@ export function CreateModal({
           </Field>
           {kind === "listing" && (
             <Field label="За что">
-              <select name="unit" defaultValue={draft.unit ?? "услуга"}>
+              <select
+                name="unit"
+                defaultValue={draft.unit ?? preset?.unit ?? "услуга"}
+              >
                 <option value="услуга">За услугу</option>
                 <option value="час">За час</option>
                 <option value="порция">За порцию</option>
