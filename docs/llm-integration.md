@@ -13,6 +13,7 @@
    LLM_ENABLED=true
    LLM_BASE_URL=http://blizu-ollama:11434
    LLM_MODEL=qwen3:8b
+   LLM_KEEP_WARM=true
    LLM_TIMEOUT_MS=45000
    ```
 
@@ -26,7 +27,7 @@
 
    В списке должна появиться `qwen3:8b`. Ошибка `ENOTFOUND` означает, что API не разрешает указанное имя контейнера. Сверьте алиас и проверьте, что **оба** контейнера отображаются в сети `blizu_llm`. Пустой список моделей означает, что Ollama доступна, но модель ещё нужно загрузить в этом контейнере командой `ollama pull qwen3:8b`. [Проверка списка моделей](https://docs.ollama.com/api/tags)
 
-5. После обновления откройте чат в Blizu и задайте вопрос «Где посмотреть мои заказы?». На короткое приветствие Blizu отвечает сразу. Для остальных вопросов ответ поступает частями из Ollama через Nginx и Express. Blizu запрашивает хранение модели в памяти 15 минут после обращения. Для локального Node-процесса с Ollama на том же ПК укажите `LLM_BASE_URL=http://127.0.0.1:11434`. [Потоковые ответы Ollama](https://docs.ollama.com/api/streaming) · [Настройка Nginx Blizu](../deploy/nginx.conf)
+5. После обновления откройте чат в Blizu и задайте вопрос «Где посмотреть мои заказы?». На короткое приветствие Blizu отвечает сразу. Для вопросов к Ollama текст появляется по мере генерации через Nginx и Express. При `LLM_KEEP_WARM=true` Blizu загружает модель в фоне при запуске API и просит Ollama держать её в RAM или VRAM. При `LLM_KEEP_WARM=false` предварительная загрузка отключается и Ollama держит модель в памяти 15 минут после запроса. Для локального Node-процесса с Ollama на том же ПК укажите `LLM_BASE_URL=http://127.0.0.1:11434`. [Прогрев модели в Ollama](https://docs.ollama.com/faq#how-can-i-preload-a-model-into-ollama-to-get-faster-response-times) · [Настройка Nginx Blizu](../deploy/nginx.conf)
 
 ## Что умеет помощник
 
@@ -88,6 +89,7 @@
    LLM_ENABLED=false
    LLM_BASE_URL=http://blizu-ollama:11434
    LLM_MODEL=qwen3:8b
+   LLM_KEEP_WARM=true
    LLM_TIMEOUT_MS=45000
    ```
 

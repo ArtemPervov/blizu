@@ -1,4 +1,11 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { ArrowUp, ArrowUpRight, Sparkles, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -11,6 +18,7 @@ import {
 } from "../shared/assistant-stream";
 import { euro, json, useI18n } from "./lib";
 import { cityName } from "./market-copy";
+import { createReplyReveal } from "./assistant-reply";
 
 const copy = {
   ru: {
@@ -182,7 +190,7 @@ function AssistantChat({
   const followLatest = useRef(true);
 
   useEffect(() => () => active.current?.abort(), []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (visible && followLatest.current && transcript.current)
       transcript.current.scrollTop = transcript.current.scrollHeight;
   }, [turns, attempt, visible]);
@@ -196,6 +204,11 @@ function AssistantChat({
     setQuestion("");
     setAttempt({ question: message, answer: "" });
     setStatus("pending");
+    const reveal = createReplyReveal((answer) =>
+      setAttempt({ question: message, answer }),
+    );
+    controller.signal.addEventListener("abort", reveal.stop, { once: true });
+    let answer = "";
     try {
       const response = await fetch("/api/assistant/chat", {
         method: "POST",
@@ -212,7 +225,6 @@ function AssistantChat({
       });
       if (!response.ok || !response.body)
         throw new Error("Chat request failed");
-      let answer = "";
       let action: ChatAction | undefined;
       let done = false;
       for await (const value of readJsonLines(response.body)) {
@@ -222,13 +234,13 @@ function AssistantChat({
         }
         if ("delta" in value && typeof value.delta === "string") {
           answer += value.delta;
-          setAttempt({ question: message, answer });
+          reveal.append(value.delta);
         }
         if ("result" in value) {
           const result = value.result as ChatResult;
           answer = result.answer;
           action = result.action;
-          setAttempt({ question: message, answer });
+          reveal.replace(answer);
         }
         if ("done" in value && value.done === true) {
           done = true;
@@ -237,6 +249,8 @@ function AssistantChat({
       }
       if (controller.signal.aborted) return;
       if (!done || !answer.trim()) throw new Error("Incomplete chat response");
+      await reveal.finish();
+      if (controller.signal.aborted) return;
       setTurns((previous) => [
         ...previous.slice(-19),
         { question: message, answer, action },
@@ -257,10 +271,13 @@ function AssistantChat({
       }
     } catch {
       if (!controller.signal.aborted) {
+        if (answer) reveal.replace(answer);
         setQuestion(message);
         setStatus("failed");
       }
     } finally {
+      controller.signal.removeEventListener("abort", reveal.stop);
+      reveal.stop();
       active.current = null;
     }
   }
@@ -365,14 +382,23 @@ function AssistantChat({
               {attempt.answer && (
                 <p className="assistant-answer">{attempt.answer}</p>
               )}
+              {pending && !attempt.answer && (
+                <p
+                  className="assistant-answer assistant-waiting"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="assistant-dots" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                  {text.loading}
+                </p>
+              )}
             </div>
           )}
         </div>
-      )}
-      {pending && !attempt?.answer && (
-        <p className="muted assistant-status" role="status">
-          {text.loading}
-        </p>
       )}
       {status === "failed" && (
         <p className="muted assistant-status" role="alert">

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { createApp, type AppOptions } from "./app.js";
+import { assistantConfig, preloadAssistant } from "./assistant.js";
 import { Store } from "./db.js";
 import { chatStreamType, readJsonLines } from "../shared/assistant-stream.js";
 
@@ -133,6 +134,11 @@ test("Ollama chat works for guests, answers greetings locally and streams model 
     for await (const part of req) raw += part;
     const payload = JSON.parse(raw);
     forwarded.push({ url: req.url, payload });
+    if (!payload.messages.length) {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ done: true, done_reason: "load" }));
+      return;
+    }
     if (payload.stream) {
       res.setHeader("Content-Type", chatStreamType);
       res.write(
@@ -163,11 +169,18 @@ test("Ollama chat works for guests, answers greetings locally and streams model 
   await once(upstream, "listening");
   const address = upstream.address();
   assert.ok(address && typeof address === "object");
-  const enabled = fixture(true, false, {
-    baseUrl: `http://127.0.0.1:${address.port}`,
-    model: "qwen3:8b",
-    timeoutMs: 8000,
-  });
+  const options = {
+    LLM_ENABLED: "true",
+    LLM_BASE_URL: `http://127.0.0.1:${address.port}`,
+    LLM_MODEL: "qwen3:8b",
+    LLM_TIMEOUT_MS: "8000",
+  };
+  const config = assistantConfig(options)!;
+  assert.equal(
+    assistantConfig({ ...options, LLM_KEEP_WARM: "false" })?.keepWarm,
+    false,
+  );
+  const enabled = fixture(true, false, config);
   const http = enabled.app.listen(0, "127.0.0.1");
   try {
     const guest = request(enabled.app);
@@ -191,6 +204,17 @@ test("Ollama chat works for guests, answers greetings locally and streams model 
       .send({ ...chat, message: "Привет!" })
       .expect(200, { answer: "Привет! Чем могу помочь в Blizu?" });
     assert.equal(forwarded.length, 0);
+    await preloadAssistant(config);
+    assert.deepEqual(forwarded.shift(), {
+      url: "/api/chat",
+      payload: {
+        model: "qwen3:8b",
+        messages: [],
+        stream: false,
+        keep_alive: -1,
+        options: { num_ctx: 4096 },
+      },
+    });
     await guest
       .post(endpoint)
       .send(chat)
@@ -198,7 +222,7 @@ test("Ollama chat works for guests, answers greetings locally and streams model 
     assert.equal(forwarded[0].url, "/api/chat");
     assert.equal(forwarded[0].payload.model, "qwen3:8b");
     assert.equal(forwarded[0].payload.stream, false);
-    assert.equal(forwarded[0].payload.keep_alive, "15m");
+    assert.equal(forwarded[0].payload.keep_alive, -1);
     const messages = forwarded[0].payload.messages as {
       role: string;
       content: string;

@@ -2,7 +2,7 @@ import { createApp, passwordHash } from "./app.js";
 import { now } from "./db.js";
 import { randomUUID } from "node:crypto";
 import { provisionOperator } from "./provision-operator.js";
-import { assistantConfig } from "./assistant.js";
+import { assistantConfig, preloadAssistant } from "./assistant.js";
 
 const production = process.env.NODE_ENV === "production";
 const staleHours = Number(process.env.DELIVERY_STALE_HOURS ?? 72);
@@ -12,6 +12,7 @@ if (production && !process.env.APP_ORIGIN)
   throw new Error("Set APP_ORIGIN to the public HTTPS origin.");
 if (production && !process.env.APP_ORIGIN?.startsWith("https://"))
   throw new Error("APP_ORIGIN must use HTTPS in production.");
+const assistant = assistantConfig(process.env);
 const { app, store, checkStaleOrders } = createApp({
   production,
   demo:
@@ -22,7 +23,7 @@ const { app, store, checkStaleOrders } = createApp({
   dataDir: process.env.DATA_DIR,
   staleHours,
   deliveryEnabled: process.env.ENABLE_DELIVERY === "true",
-  assistant: assistantConfig(process.env),
+  assistant,
 });
 if (
   process.env.ADMIN_EMAIL &&
@@ -44,9 +45,14 @@ if (
   );
 }
 await provisionOperator(store, process.env.OPERATOR_EMAIL, process.env.OPERATOR_PASSWORD);
-const server = app.listen(Number(process.env.PORT ?? 3001), "0.0.0.0", () =>
-  console.log(`blizu API http://localhost:${process.env.PORT ?? 3001}`),
-);
+const server = app.listen(Number(process.env.PORT ?? 3001), "0.0.0.0", () => {
+  console.log(`blizu API http://localhost:${process.env.PORT ?? 3001}`);
+  if (assistant?.keepWarm) {
+    void preloadAssistant(assistant).catch(() => {
+      console.warn("Ollama preload failed. The next chat request will try to load the model.");
+    });
+  }
+});
 checkStaleOrders();
 const timer = setInterval(() => {
   try {

@@ -18,6 +18,7 @@ import type { AuthRequest } from "./app.js";
 import { HttpError } from "./errors.js";
 
 const answerLimit = 2400;
+const contextSize = 4096;
 const languages = {
   ru: "Russian",
   en: "English",
@@ -84,6 +85,7 @@ export type AssistantConfig = {
   baseUrl: string;
   model: string;
   timeoutMs: number;
+  keepWarm?: boolean;
 };
 
 export function assistantConfig(
@@ -110,7 +112,29 @@ export function assistantConfig(
     baseUrl: url.origin,
     model: env.LLM_MODEL?.trim() || "qwen3:8b",
     timeoutMs,
+    keepWarm: (env.LLM_KEEP_WARM ?? "true") === "true",
   };
+}
+
+export async function preloadAssistant(config: AssistantConfig) {
+  const response = await fetch(new URL("/api/chat", config.baseUrl), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    redirect: "error",
+    signal: AbortSignal.timeout(60_000),
+    body: JSON.stringify({
+      model: config.model,
+      messages: [],
+      stream: false,
+      keep_alive: -1,
+      options: { num_ctx: contextSize },
+    }),
+  });
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`Ollama preload returned HTTP ${response.status}`);
+  }
+  await response.json();
 }
 
 function writeEvent(res: Response, event: ChatEvent) {
@@ -204,8 +228,8 @@ export function registerAssistant(
           stream: streaming,
           tools: assistantTools,
           think: false,
-          keep_alive: "15m",
-          options: { num_ctx: 4096, num_predict: 500 },
+          keep_alive: config.keepWarm ? -1 : "15m",
+          options: { num_ctx: contextSize, num_predict: 500 },
         }),
       });
       if (!response.ok) {

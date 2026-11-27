@@ -235,6 +235,56 @@ test("the guest assistant streams a reply without leaving the current page", asy
   assert.ok(await screen.findByText("Откройте раздел «Мои заказы»."));
 });
 
+test("the assistant reveals a burst progressively with a stable waiting state", async () => {
+  Object.defineProperty(window, "matchMedia", {
+    value: (query: string) => ({ ...media(query), matches: false }),
+    configurable: true,
+  });
+  Object.defineProperty(document, "hidden", { value: false, configurable: true });
+  const answer = "Откройте страницу объявления, выберите способ связи с автором, указанный в карточке, и напишите, что именно вас интересует.";
+  const baseFetch = globalThis.fetch;
+  let source!: ReadableStreamDefaultController<Uint8Array>;
+  globalThis.fetch = async (input, init) => {
+    if (input === "/api/meta") {
+      const meta = await (await baseFetch(input, init)).json();
+      return Response.json({ ...meta, assistantEnabled: true });
+    }
+    if (input === "/api/assistant/chat") {
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          source = controller;
+        },
+      }), { headers: { "Content-Type": "application/x-ndjson" } });
+    }
+    return baseFetch(input, init);
+  };
+  try {
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "AI помощник" }));
+    fireEvent.click(screen.getByRole("button", { name: "Где посмотреть мои заказы?" }));
+    const dialog = screen.getByRole("dialog", { name: "AI помощник" });
+    assert.ok(within(dialog).getByRole("status"));
+    const frames: string[] = [];
+    const observer = new MutationObserver(() => {
+      const reply = dialog.querySelector(".assistant-answer:not(.assistant-waiting)")?.textContent;
+      if (reply) frames.push(reply);
+    });
+    observer.observe(dialog, { childList: true, characterData: true, subtree: true });
+    try {
+      const data = JSON.stringify({ delta: answer }) + '\n{"done":true}\n';
+      source.enqueue(new TextEncoder().encode(data));
+      source.close();
+      await within(dialog).findByText(answer);
+      assert.ok(frames.some((frame) => frame !== answer && answer.startsWith(frame)));
+      assert.equal(within(dialog).queryByRole("status"), null);
+    } finally {
+      observer.disconnect();
+    }
+  } finally {
+    Reflect.deleteProperty(document, "hidden");
+  }
+});
+
 test("guest assistant links to catalog matches and opens an explicit match", async () => {
   const filters = { category: "auto" };
   const { body } = await agent.get("/api/listings?category=auto").expect(200);

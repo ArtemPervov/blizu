@@ -17,6 +17,7 @@ services:
       LLM_ENABLED: ${LLM_ENABLED:-false}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://blizu-ollama:11434}
       LLM_MODEL: ${LLM_MODEL:-qwen3:8b}
+      LLM_KEEP_WARM: ${LLM_KEEP_WARM:-true}
       LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-45000}
       DELIVERY_STALE_HOURS: ${DELIVERY_STALE_HOURS:-72}
       ADMIN_EMAIL: ${ADMIN_EMAIL:?Set the arbiter email}
