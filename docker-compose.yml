@@ -3,6 +3,7 @@ name: blizu
 services:
   api:
     image: ${BLIZU_IMAGE_PREFIX:-blizu}-api:${BLIZU_VERSION:-latest}
+    pull_policy: build
     build:
       context: .
       target: api
@@ -28,6 +29,7 @@ services:
       - blizu_data:/app/data
     networks:
       - app
+      - inference
     read_only: true
     tmpfs:
       - /tmp
@@ -43,6 +45,7 @@ services:
 
   web:
     image: ${BLIZU_IMAGE_PREFIX:-blizu}-web:${BLIZU_VERSION:-latest}
+    pull_policy: build
     build:
       context: .
       target: web
@@ -77,3 +80,6 @@ networks:
   proxy:
     external: true
     name: ${PROXY_NETWORK:-proxy}
+  inference:
+    external: true
+    name: blizu_llm

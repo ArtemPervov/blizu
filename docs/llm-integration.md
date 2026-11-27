@@ -7,23 +7,7 @@
 Этот раздел подходит, если вы уже создали сеть `blizu_llm` (тип `bridge`) и загрузили модель. `inference` — имя, под которым файл Compose стека Blizu ссылается на эту сеть.
 
 1. В Portainer откройте **Networks → blizu_llm** и проверьте, что к сети подключён контейнер Ollama. В примере ниже он имеет сетевой алиас `blizu-ollama`. Если в стеке Ollama сервис называется `ollama` и алиас не задан, используйте `ollama` как имя хоста.
-2. Для стека из Git откройте **Stacks → blizu → Edit stack settings**. В **Additional paths → Add file** укажите `docker-compose.ollama.yml`. Он дополняет текущий **Compose path** и подключает только `api` к уже существующей сети `blizu_llm`. Сохраните настройки и выполните **Pull and redeploy**. [Дополнительные Compose-файлы в Portainer](https://docs.portainer.io/user/docker/stacks/add#option-3-git-repository) · [Настройки существующего стека](https://docs.portainer.io/user/docker/stacks/edit#edit-stack-settings)
-
-   Для запуска через CLI передайте [сетевое дополнение](../docker-compose.ollama.yml) вторым файлом после основного Compose.
-
-   ```sh
-   docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d --build
-   ```
-
-3. В **Containers → контейнер Blizu API → Console** запустите `/bin/sh` и выполните команду. Если у вас имя хоста `ollama`, замените `blizu-ollama` в команде.
-
-   ```sh
-   node -e 'fetch("http://blizu-ollama:11434/api/tags", {signal: AbortSignal.timeout(5000)}).then(async r => { if (!r.ok) throw Error(String(r.status)); console.log((await r.json()).models.map(m => m.name)) }).catch(e => { console.error(e); process.exitCode = 1 })'
-   ```
-
-   В списке должна появиться `qwen3:8b`. Ошибка `ENOTFOUND` означает, что API не разрешает указанное имя контейнера. Сверьте алиас и проверьте, что **оба** контейнера отображаются в сети `blizu_llm`. Пустой список моделей означает, что Ollama доступна, но модель ещё нужно загрузить в этом контейнере командой `ollama pull qwen3:8b`. [Проверка списка моделей](https://docs.ollama.com/api/tags)
-
-4. Для чата обновите оба образа Blizu, `api` и `web`, из текущих исходников. Внесите переменные ниже в **Environment variables** стека. В [Compose для Portainer](../docker-compose.portainer.yml) они уже передаются в контейнер `api`. Если используете свой Compose, перенесите также строки `LLM_*` из его блока `environment`.
+2. В **Stacks → blizu → Environment variables** установите переменные чата. В `LLM_BASE_URL` укажите имя или алиас контейнера Ollama в сети `blizu_llm`.
 
    ```dotenv
    LLM_ENABLED=true
@@ -32,7 +16,17 @@
    LLM_TIMEOUT_MS=45000
    ```
 
-   После обновления зайдите в Blizu и задайте вопрос «Где посмотреть мои заказы?». Тот же маршрут `/api/` обслуживает чат через существующие Nginx и Express. Для локального Node-процесса с Ollama на том же ПК укажите `LLM_BASE_URL=http://127.0.0.1:11434`. [Настройка Nginx Blizu](../deploy/nginx.conf)
+3. Сохраните настройки и выполните **Pull and redeploy**. Стек из Git использует [основной Compose](../docker-compose.yml), который собирает образы `api` и `web` из исходников и подключает `api` к сети `blizu_llm`. Для запуска из локальной копии репозитория используйте `docker compose up -d --build`. [Настройки стека из Git](https://docs.portainer.io/user/docker/stacks/edit#pull-and-redeploy)
+
+4. В **Containers → контейнер Blizu API → Console** запустите `/bin/sh` и выполните команду. Если у вас имя хоста `ollama`, замените `blizu-ollama` в команде.
+
+   ```sh
+   node -e 'fetch("http://blizu-ollama:11434/api/tags", {signal: AbortSignal.timeout(5000)}).then(async r => { if (!r.ok) throw Error(String(r.status)); console.log((await r.json()).models.map(m => m.name)) }).catch(e => { console.error(e); process.exitCode = 1 })'
+   ```
+
+   В списке должна появиться `qwen3:8b`. Ошибка `ENOTFOUND` означает, что API не разрешает указанное имя контейнера. Сверьте алиас и проверьте, что **оба** контейнера отображаются в сети `blizu_llm`. Пустой список моделей означает, что Ollama доступна, но модель ещё нужно загрузить в этом контейнере командой `ollama pull qwen3:8b`. [Проверка списка моделей](https://docs.ollama.com/api/tags)
+
+5. После обновления зайдите в Blizu и задайте вопрос «Где посмотреть мои заказы?». Тот же маршрут `/api/` обслуживает чат через Nginx и Express. Для локального Node-процесса с Ollama на том же ПК укажите `LLM_BASE_URL=http://127.0.0.1:11434`. [Настройка Nginx Blizu](../deploy/nginx.conf)
 
 ## Как помощник будет развиваться
 

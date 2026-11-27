@@ -1,9 +1,0 @@
-services:
-  api:
-    networks:
-      - inference
-
-networks:
-  inference:
-    external: true
-    name: blizu_llm
