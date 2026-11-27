@@ -185,6 +185,33 @@ function header() {
   return within(screen.getByRole("banner"));
 }
 
+test("the enabled assistant can be opened and renders a reply for a signed-in user", async () => {
+  await agent.post("/api/auth/demo").send({ role: "customer" }).expect(200);
+  const baseFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    if (input === "/api/meta") {
+      const meta = await (await baseFetch(input, init)).json();
+      return Response.json({ ...meta, assistantEnabled: true });
+    }
+    if (input === "/api/assistant/chat") {
+      assert.equal(JSON.parse(String(init?.body)).message, "Где мои заказы?");
+      return Response.json({ answer: "Откройте раздел «Мои заказы»." });
+    }
+    return baseFetch(input, init);
+  };
+  mount();
+  fireEvent.click(await screen.findByRole("link", { name: "ИИ-помощник" }));
+  await screen.findByRole("heading", { name: "ИИ-помощник" });
+  fireEvent.change(await screen.findByRole("textbox", { name: "Ваш вопрос" }), {
+    target: { value: "Где мои заказы?" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Отправить" }));
+  const transcript = await screen.findByRole("log");
+  assert.ok(
+    await within(transcript).findByText("Откройте раздел «Мои заказы»."),
+  );
+});
+
 test("the hero keeps a decorative contour background with reduced motion and leaves its title and search usable", async () => {
   const { container } = mount();
   await cards();

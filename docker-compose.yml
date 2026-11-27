@@ -13,6 +13,10 @@ services:
       APP_ORIGIN: ${APP_ORIGIN:?Set the public HTTPS origin}
       ENABLE_DEMO: ${ENABLE_DEMO:-false}
       ENABLE_DELIVERY: ${ENABLE_DELIVERY:-false}
+      LLM_ENABLED: ${LLM_ENABLED:-false}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://blizu-ollama:11434}
+      LLM_MODEL: ${LLM_MODEL:-qwen3:8b}
+      LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-45000}
       DELIVERY_STALE_HOURS: ${DELIVERY_STALE_HOURS:-72}
       ADMIN_EMAIL: ${ADMIN_EMAIL:?Set the arbiter email}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set a strong arbiter password}

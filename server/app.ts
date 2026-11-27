@@ -40,6 +40,7 @@ import {
 } from "./moderation.js";
 import { registerOperatorRoutes } from "./operator.js";
 import { attachListingSources } from "./listing-sources.js";
+import { registerAssistant, type AssistantConfig } from "./assistant.js";
 
 const scryptAsync = promisify(scrypt);
 const userSelect = "id,name,email,city,role,contact,rating,verified";
@@ -71,6 +72,7 @@ export type AppOptions = {
   dataDir?: string;
   staleHours?: number;
   deliveryEnabled?: boolean;
+  assistant?: AssistantConfig;
 };
 
 export async function passwordHash(password: string) {
@@ -297,6 +299,7 @@ export function createApp(options: AppOptions = {}) {
     res.json({
       demo,
       deliveryEnabled,
+      assistantEnabled: !!options.assistant,
       categories: CATEGORIES,
       cities: CITIES,
       stats: {
@@ -392,6 +395,8 @@ export function createApp(options: AppOptions = {}) {
     });
     res.json({ ok: true });
   });
+
+  if (options.assistant) registerAssistant(app, requireUser, options.assistant);
 
   app.get("/api/listings", (req, res) => {
     const input = z

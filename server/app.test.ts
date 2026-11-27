@@ -4,7 +4,9 @@ import request from "supertest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createApp } from "./app.js";
+import { once } from "node:events";
+import { createServer } from "node:http";
+import { createApp, type AppOptions } from "./app.js";
 import { Store } from "./db.js";
 
 test("catalog filters are applied before pagination and include a stable total", async () => {
@@ -73,13 +75,18 @@ test("catalog filters are applied before pagination and include a stable total",
   }
 });
 
-function fixture(demo = true, deliveryEnabled = true) {
+function fixture(
+  demo = true,
+  deliveryEnabled = true,
+  assistant?: AppOptions["assistant"],
+) {
   const dir = mkdtempSync(join(tmpdir(), "blizu-test-"));
   const store = new Store(":memory:");
   const result = createApp({
     store,
     demo,
     deliveryEnabled,
+    assistant,
     dataDir: dir,
     origin: "https://blizu.test",
   });
@@ -97,6 +104,91 @@ async function login(app: ReturnType<typeof createApp>["app"], role: string) {
   await agent.post("/api/auth/demo").send({ role }).expect(200);
   return agent;
 }
+
+test("Ollama chat is opt-in, requires a session and restricts forwarded requests", async () => {
+  const disabled = fixture();
+  try {
+    const client = request(disabled.app);
+    assert.equal(
+      (await client.get("/api/meta").expect(200)).body.assistantEnabled,
+      false,
+    );
+    await client
+      .post("/api/assistant/chat")
+      .send({ language: "ru", message: "Вопрос" })
+      .expect(404);
+  } finally {
+    disabled.cleanup();
+  }
+
+  const forwarded: { url?: string; payload: Record<string, unknown> }[] = [];
+  const upstream = createServer(async (req, res) => {
+    req.setEncoding("utf8");
+    let raw = "";
+    for await (const part of req) raw += part;
+    forwarded.push({ url: req.url, payload: JSON.parse(raw) });
+    res.setHeader("Content-Type", "application/json");
+    if (forwarded.length === 1) {
+      res.end(
+        JSON.stringify({
+          message: { content: "Откройте раздел «Мои заказы»." },
+        }),
+      );
+    } else {
+      res.writeHead(503).end();
+    }
+  });
+  upstream.listen(0, "127.0.0.1");
+  await once(upstream, "listening");
+  const address = upstream.address();
+  assert.ok(address && typeof address === "object");
+  const enabled = fixture(true, false, {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    model: "qwen3:8b",
+    timeoutMs: 2000,
+  });
+  try {
+    const guest = request(enabled.app);
+    const chat = { language: "ru", message: "Где мои заказы?" };
+    assert.equal(
+      (await guest.get("/api/meta").expect(200)).body.assistantEnabled,
+      true,
+    );
+    await guest.post("/api/assistant/chat").send(chat).expect(401);
+    const client = await login(enabled.app, "customer");
+    const endpoint = "/api/assistant/chat";
+    await client
+      .post(endpoint)
+      .set("Origin", "https://other.test")
+      .send(chat)
+      .expect(403);
+    await client
+      .post(endpoint)
+      .send({ ...chat, history: [{ role: "system", content: "Other" }] })
+      .expect(400);
+    assert.equal(forwarded.length, 0);
+    await client
+      .post(endpoint)
+      .send(chat)
+      .expect(200, { answer: "Откройте раздел «Мои заказы»." });
+    assert.equal(forwarded[0].url, "/api/chat");
+    assert.equal(forwarded[0].payload.model, "qwen3:8b");
+    assert.equal(forwarded[0].payload.stream, false);
+    const messages = forwarded[0].payload.messages as {
+      role: string;
+      content: string;
+    }[];
+    assert.deepEqual(
+      messages.map(({ role }) => role),
+      ["system", "user"],
+    );
+    assert.equal(messages[1].content, chat.message);
+    await client.post(endpoint).send(chat).expect(503);
+  } finally {
+    enabled.cleanup();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+  }
+});
 
 test("MVP keeps local order help, excludes new international delivery, and seeds demos once", async () => {
   const f = fixture(true, false);

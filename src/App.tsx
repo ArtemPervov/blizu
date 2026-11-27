@@ -55,6 +55,7 @@ import { useAvailableListings } from "./available-listings";
 import { ReportModal, type ReportTarget } from "./components/ReportButton";
 import { CityPicker } from "./components/CityPicker";
 import { orderHelpPath } from "./market-copy";
+import { AssistantLink, AssistantPage } from "./AssistantPage";
 export type CreateAction = (kind: CreateKind, preset?: CreatePreset) => void;
 
 export default function App() {
@@ -103,6 +104,7 @@ export default function App() {
       api<{
         demo: boolean;
         deliveryEnabled: boolean;
+        assistantEnabled?: boolean;
         stats: {
           listings: number;
           providers: number;
@@ -445,6 +447,12 @@ export default function App() {
             path="/favorites"
             element={<Favorites requireLogin={() => setAuthOpen(true)} />}
           />
+          {meta?.assistantEnabled && (
+            <Route
+              path="/assistant"
+              element={<AssistantPage signIn={() => setAuthOpen(true)} />}
+            />
+          )}
           <Route
             path="*"
             element={
@@ -492,6 +500,9 @@ export default function App() {
         </NavLink>
       </nav>
       <CompareTray />
+      {meta?.assistantEnabled && location.pathname !== "/assistant" && (
+        <AssistantLink />
+      )}
       <footer className="site-footer">
         <div className="footer-main">
           <div>

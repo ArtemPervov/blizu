@@ -2,6 +2,7 @@ import { createApp, passwordHash } from "./app.js";
 import { now } from "./db.js";
 import { randomUUID } from "node:crypto";
 import { provisionOperator } from "./provision-operator.js";
+import { assistantConfig } from "./assistant.js";
 
 const production = process.env.NODE_ENV === "production";
 const staleHours = Number(process.env.DELIVERY_STALE_HOURS ?? 72);
@@ -21,6 +22,7 @@ const { app, store, checkStaleOrders } = createApp({
   dataDir: process.env.DATA_DIR,
   staleHours,
   deliveryEnabled: process.env.ENABLE_DELIVERY === "true",
+  assistant: assistantConfig(process.env),
 });
 if (
   process.env.ADMIN_EMAIL &&
