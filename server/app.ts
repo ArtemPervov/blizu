@@ -448,11 +448,12 @@ export function createApp(options: AppOptions = {}) {
       where.push("l.city=?");
       params.push(input.city);
     }
-    if (input.q) {
+    const search = input.q?.trim();
+    if (search) {
       where.push(
-        "instr(casefold(l.title || ' ' || l.description || ' ' || u.name || ' ' || COALESCE((SELECT ls.authorName FROM listing_sources ls WHERE ls.listingId=l.id),'')),?)>0",
+        "catalog_match(l.title || ' ' || l.description || ' ' || u.name || ' ' || COALESCE((SELECT ls.authorName FROM listing_sources ls WHERE ls.listingId=l.id),''),?)>0",
       );
-      params.push(input.q.toLocaleLowerCase("ru"));
+      params.push(search);
     }
     if (input.minPrice !== undefined) {
       where.push(
@@ -478,6 +479,8 @@ export function createApp(options: AppOptions = {}) {
         `SELECT COUNT(*) AS count FROM listings l JOIN users u ON u.id=l.providerId WHERE ${where.join(" AND ")}`,
         ...params,
       )?.count ?? 0;
+    const titleSearch = search && input.sort === "recommended" ? search : undefined;
+    const relevance = titleSearch ? "catalog_match(l.title,?) DESC," : "";
     const ordering =
       input.sort === "price"
         ? "EXISTS(SELECT 1 FROM listing_sources ls WHERE ls.listingId=l.id AND ls.priceKnown=0) ASC,l.price ASC,l.id ASC"
@@ -494,7 +497,13 @@ export function createApp(options: AppOptions = {}) {
           tags: string;
           providerVerified: number;
         }
-      >(`${listingsSelect} WHERE ${where.join(" AND ")} ORDER BY ${ordering} LIMIT ? OFFSET ?`, ...params, input.limit, input.offset)
+      >(
+        `${listingsSelect} WHERE ${where.join(" AND ")} ORDER BY ${relevance}${ordering} LIMIT ? OFFSET ?`,
+        ...params,
+        ...(titleSearch ? [titleSearch] : []),
+        input.limit,
+        input.offset,
+      )
       .map((l) => ({
         ...l,
         tags: JSON.parse(String(l.tags)),

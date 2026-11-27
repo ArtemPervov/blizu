@@ -2,6 +2,7 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID, randomBytes, scryptSync } from "node:crypto";
+import { createCatalogMatcher } from "./catalog-keywords.js";
 
 export class Store {
   db: DatabaseSync;
@@ -13,6 +14,10 @@ export class Store {
     );
     this.db.function("casefold", { deterministic: true }, (value) =>
       String(value ?? "").toLocaleLowerCase("ru"),
+    );
+    const catalogMatch = createCatalogMatcher();
+    this.db.function("catalog_match", { deterministic: true }, (text, query) =>
+      catalogMatch(String(text ?? ""), String(query ?? "")),
     );
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS users (

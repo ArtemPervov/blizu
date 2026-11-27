@@ -294,7 +294,15 @@ test("assistant uses the public catalog and prepares a listing without publishin
     calls.push(question);
     const call = question.includes("велосипед")
       ? { name: "prepare_listing", arguments: draft }
-      : { name: "search_catalog", arguments: { category: "auto", city: "Будва", q: "Skoda", maxPrice: 5000 } };
+      : {
+          name: "search_catalog",
+          arguments: {
+            q: question.includes("массаж") ? "массаж" : "Skoda",
+            category: "beauty",
+            city: "Подгорица",
+            maxPrice: 10,
+          },
+        };
     const reply = { done: true, message: { content: "", tool_calls: [{ function: call }] } };
     res.setHeader("Content-Type", stream ? chatStreamType : "application/json");
     res.end(JSON.stringify(reply) + (stream ? "\n" : ""));
@@ -323,8 +331,17 @@ test("assistant uses the public catalog and prepares a listing without publishin
     const found = (await send("Найди Skoda в Будве до 5000 €").expect(200)).body.action;
     assert.deepEqual(found.listings.map((item: { id: string }) => item.id), [published.body.id]);
     assert.ok(!found.listings.some((item: { id: string }) => item.id === overBudget.body.id));
+    assert.deepEqual(found.filters, { q: "Skoda", city: "Будва", maxPrice: 5000 });
+    assert.equal(calls.length, 0);
 
-    const prepared = await send("Размести городской велосипед в Баре за 120 €")
+    const interpreted = (
+      await send("Подскажите, где предлагают массаж?").expect(200)
+    ).body.action;
+    assert.deepEqual(interpreted.filters, { q: "массаж" });
+    assert.deepEqual(interpreted.listings.map(({ id }: { id: string }) => id), ["l-beauty"]);
+    assert.equal(calls.length, 1);
+
+    const prepared = await send("Мне нужно разместить городской велосипед в Баре за 120 €")
       .set("Accept", chatStreamType)
       .expect(200);
     const events = prepared.text.trim().split("\n").map((line: string) => JSON.parse(line));
@@ -337,6 +354,64 @@ test("assistant uses the public catalog and prepares a listing without publishin
     f.cleanup();
     upstream.closeAllConnections();
     await new Promise<void>((resolve) => upstream.close(() => resolve()));
+  }
+});
+
+test("assistant keyword search finds word forms across cities and ranks title matches", async () => {
+  const f = fixture(true, false, {
+    baseUrl: "http://127.0.0.1:1",
+    model: "qwen3:8b",
+    timeoutMs: 1500,
+  });
+  try {
+    const author = await login(f.app, "provider");
+    const publish = async (title: string, description: string, city: string) => {
+      const response = await author.post("/api/listings").send({
+        title, description, city, category: "goods", price: 40, unit: "товар",
+      }).expect(201);
+      return response.body.id as string;
+    };
+    const dryer = await publish("Сухожар", "Стерилизатор для инструментов в хорошем состоянии.", "Ульцинь");
+    const fan = await publish("Вентилятор Philips", "Настольный вентилятор, три скорости, есть таймер.", "Подгорица");
+    const localFan = await publish(
+      "Ventilator Rovus",
+      "Stoni ventilator sa postoljem, spreman za preuzimanje.",
+      "Подгорица",
+    );
+    const pc = await publish("Игровой компьютер", "Охлаждение двумя вентиляторами, есть SSD.", "Бар");
+    const hidden = await publish("Вентилятор скрытый", "Этот товар снят с публикации модератором.", "Подгорица");
+    f.store.run(
+      "INSERT INTO listing_moderation (listingId,operatorId,reason,createdAt) VALUES (?,?,?,?)",
+      hidden, "demo-provider", "Снят с публикации", new Date().toISOString(),
+    );
+
+    const guest = request(f.app);
+    const search = async (message: string, language = "ru") => {
+      const { body } = await guest.post("/api/assistant/chat").send({ language, message }).expect(200);
+      assert.equal(body.action.kind, "catalog");
+      return body.action;
+    };
+    const ids = (action: { listings: { id: string }[] }) => action.listings.map(({ id }) => id);
+
+    const dryers = await search("найди мне объявления по сухожарам");
+    assert.deepEqual(dryers.filters, { q: "сухожарам" });
+    assert.deepEqual(ids(dryers), [dryer]);
+    assert.deepEqual(ids(await search("найди объявление по сухожару")), [dryer]);
+    const fans = await search("найди вентиляторы");
+    assert.deepEqual(ids(fans), [fan, pc]);
+    assert.equal(fans.total, 2);
+    assert.deepEqual(ids(await search("вентиляторы")), [fan, pc]);
+    assert.deepEqual(ids(await search("найди вентиляторы настольные")), [fan]);
+    const results = await guest.get("/api/listings").query(fans.filters).expect(200);
+    assert.deepEqual(results.body.items.map(({ id }: { id: string }) => id), ids(fans));
+    assert.deepEqual(ids(await search("Pronađi ventilatore u Podgorici", "me")), [localFan]);
+    assert.deepEqual(ids(await search("Найди Philips в Подгорице до 35 евро")), []);
+    assert.deepEqual(ids(await search("найди массаж")), ["l-beauty"]);
+    const empty = await search("найди квантовый самовар");
+    assert.equal(empty.total, 0);
+    assert.deepEqual(ids(empty), []);
+  } finally {
+    f.cleanup();
   }
 });
 

@@ -1,23 +1,8 @@
-import { CATEGORIES, CITIES } from "../shared/types";
+import { CATEGORIES } from "../shared/types";
+import { latinCities } from "../shared/market-locations";
 import type { Language } from "./lib";
 
 export const orderHelpPath = "/?category=delivery#catalog";
-
-const latinCities: Record<(typeof CITIES)[number], string> = {
-  Бар: "Bar",
-  Будва: "Budva",
-  Котор: "Kotor",
-  Тиват: "Tivat",
-  Подгорица: "Podgorica",
-  "Херцег-Нови": "Herceg Novi",
-  Бечичи: "Bečići",
-  Петровац: "Petrovac",
-  Сутоморе: "Sutomore",
-  Ульцинь: "Ulcinj",
-  Цетине: "Cetinje",
-  Никшич: "Nikšić",
-  "Вся Черногория": "Cijela Crna Gora",
-};
 
 export function cityName(city: string, language: Language) {
   if (language === "ru") return city;

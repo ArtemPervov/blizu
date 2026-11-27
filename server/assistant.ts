@@ -10,10 +10,14 @@ import {
 import {
   assistantTools,
   catalogResult,
-  findCategory,
   runAssistantTool,
   type FindCatalogListings,
 } from "./assistant-actions.js";
+import {
+  catalogFiltersIn,
+  isBareCatalogQuery,
+  isCatalogCommand,
+} from "./assistant-search.js";
 import type { AuthRequest } from "./app.js";
 import { HttpError } from "./errors.js";
 
@@ -192,14 +196,21 @@ export function registerAssistant(
       }
       return;
     }
-    const category = findCategory(input.message);
-    if (category) {
+    const filters = catalogFiltersIn(input.message);
+    if (isCatalogCommand(input.message)) {
       sendResult(
         res,
         streaming,
-        catalogResult(findListings, { category }, input.language),
+        catalogResult(findListings, filters, input.language),
       );
       return;
+    }
+    if (isBareCatalogQuery(input.message)) {
+      const result = catalogResult(findListings, filters, input.language);
+      if (result.action?.kind === "catalog" && result.action.total) {
+        sendResult(res, streaming, result);
+        return;
+      }
     }
     if (running >= 2) {
       throw new HttpError(429, "Помощник занят. Попробуйте чуть позже.");
@@ -244,6 +255,7 @@ export function registerAssistant(
             call.function,
             findListings,
             input.language,
+            filters,
           );
           if (result) {
             sendResult(res, streaming, result);
@@ -265,6 +277,7 @@ export function registerAssistant(
             call.function,
             findListings,
             input.language,
+            filters,
           );
           if (result) {
             sendResult(res, streaming, result);

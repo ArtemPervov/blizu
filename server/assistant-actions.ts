@@ -10,11 +10,12 @@ import {
 const categories = CATEGORIES.filter((category) => category.id !== "all");
 const category = z.enum(categories.map(({ id }) => id));
 const city = z.enum(CITIES.filter((city) => city !== "Вся Черногория"));
+const keywords = z.string().trim().min(1).max(200).optional();
 const searchInput = z
   .strictObject({
     category: category.optional(),
     city: city.optional(),
-    q: z.string().trim().max(80).optional(),
+    q: keywords,
     minPrice: z.number().min(0).max(1000000).optional(),
     maxPrice: z.number().min(0).max(1000000).optional(),
     sort: z
@@ -25,6 +26,7 @@ const searchInput = z
     ({ minPrice, maxPrice }) =>
       minPrice === undefined || maxPrice === undefined || minPrice <= maxPrice,
   );
+const searchToolInput = z.object({ q: keywords });
 const draftInput = z.strictObject({
   title: z.string().trim().min(5).max(120),
   description: z.string().trim().min(20).max(5000),
@@ -47,8 +49,8 @@ export const assistantTools = [
     function: {
       name: "search_catalog",
       description:
-        "Find public goods and services in the live Blizu catalog. Use for requests to find, show or open listings. When the user only mentions a category, pass the category ID alone. Use q for a short product, service or brand, with city, price and sort filters separately. Omit unspecified fields.",
-      parameters: z.toJSONSchema(searchInput),
+        "Find public goods and services in the live Blizu catalog. Use for requests to find, show or open listings, including a bare product or service name. Pass short keywords the user actually mentioned. The app applies cities and prices explicitly given by the user.",
+      parameters: z.toJSONSchema(searchToolInput),
     },
   },
   {
@@ -92,30 +94,16 @@ const responses = {
 
 type Language = keyof typeof responses;
 
-export function findCategory(message: string) {
-  const match =
-    /^(?:найди(?:те)?|покажи(?:те)?|открой(?:те)?|find|show|open|pronađi|pokaži|otvori)\s+(?:(?:объявлени[ея]|listings?|oglase?)\s+(?:(?:по|про|for|about|za)\s+)?)?(.+?)\s*[.!?]*$/iu.exec(
-      message,
-    );
-  if (!match) return;
-  const query = match[1].toLowerCase();
-  if (
-    ["авто", "машины", "автомобили", "cars", "vehicles", "vozila"].includes(
-      query,
-    )
-  )
-    return "auto";
-  return categories.find(({ name, en, sr }) =>
-    [name, en, sr].some((label) => label.toLowerCase() === query),
-  )?.id;
-}
-
 export function catalogResult(
   find: FindCatalogListings,
   filters: CatalogFilters,
   language: Language,
 ): ChatResult {
-  const { items, total } = find({ ...filters, limit: 4 });
+  const validated = searchInput.safeParse(filters);
+  if (!validated.success || Object.keys(filters).length === 0) {
+    return { answer: responses[language].refine };
+  }
+  const { items, total } = find({ ...validated.data, limit: 4 });
   return {
     answer: total ? responses[language].found : responses[language].empty,
     action: {
@@ -136,11 +124,16 @@ export function runAssistantTool(
   call: { name: string; arguments: unknown },
   find: FindCatalogListings,
   language: Language,
+  userFilters: CatalogFilters,
 ): ChatResult | undefined {
   if (call.name === "search_catalog") {
-    const filters = searchInput.safeParse(call.arguments);
-    return filters.success
-      ? catalogResult(find, filters.data, language)
+    const keywords = searchToolInput.safeParse(call.arguments);
+    return keywords.success
+      ? catalogResult(
+          find,
+          { ...userFilters, ...(keywords.data.q && { q: keywords.data.q }) },
+          language,
+        )
       : { answer: responses[language].refine };
   }
   if (call.name === "prepare_listing") {
