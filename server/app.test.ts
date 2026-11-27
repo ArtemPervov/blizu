@@ -8,6 +8,7 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import { createApp, type AppOptions } from "./app.js";
 import { Store } from "./db.js";
+import { chatStreamType, readJsonLines } from "../shared/assistant-stream.js";
 
 test("catalog filters are applied before pagination and include a stable total", async () => {
   const f = fixture();
@@ -105,7 +106,7 @@ async function login(app: ReturnType<typeof createApp>["app"], role: string) {
   return agent;
 }
 
-test("Ollama chat is opt-in, requires a session and restricts forwarded requests", async () => {
+test("Ollama chat works for guests, answers greetings locally and streams model text", async () => {
   const disabled = fixture();
   try {
     const client = request(disabled.app);
@@ -122,11 +123,31 @@ test("Ollama chat is opt-in, requires a session and restricts forwarded requests
   }
 
   const forwarded: { url?: string; payload: Record<string, unknown> }[] = [];
+  let finishStream!: () => void;
+  const waitForFirstEvent = new Promise<void>((resolve) => {
+    finishStream = resolve;
+  });
   const upstream = createServer(async (req, res) => {
     req.setEncoding("utf8");
     let raw = "";
     for await (const part of req) raw += part;
-    forwarded.push({ url: req.url, payload: JSON.parse(raw) });
+    const payload = JSON.parse(raw);
+    forwarded.push({ url: req.url, payload });
+    if (payload.stream) {
+      res.setHeader("Content-Type", chatStreamType);
+      res.write(
+        JSON.stringify({ message: { content: "Откройте " }, done: false }) +
+          "\n",
+      );
+      await waitForFirstEvent;
+      res.end(
+        JSON.stringify({
+          message: { content: "раздел «Мои заказы»." },
+          done: true,
+        }) + "\n",
+      );
+      return;
+    }
     res.setHeader("Content-Type", "application/json");
     if (forwarded.length === 1) {
       res.end(
@@ -145,8 +166,9 @@ test("Ollama chat is opt-in, requires a session and restricts forwarded requests
   const enabled = fixture(true, false, {
     baseUrl: `http://127.0.0.1:${address.port}`,
     model: "qwen3:8b",
-    timeoutMs: 2000,
+    timeoutMs: 8000,
   });
+  const http = enabled.app.listen(0, "127.0.0.1");
   try {
     const guest = request(enabled.app);
     const chat = { language: "ru", message: "Где мои заказы?" };
@@ -154,26 +176,29 @@ test("Ollama chat is opt-in, requires a session and restricts forwarded requests
       (await guest.get("/api/meta").expect(200)).body.assistantEnabled,
       true,
     );
-    await guest.post("/api/assistant/chat").send(chat).expect(401);
-    const client = await login(enabled.app, "customer");
     const endpoint = "/api/assistant/chat";
-    await client
+    await guest
       .post(endpoint)
       .set("Origin", "https://other.test")
       .send(chat)
       .expect(403);
-    await client
+    await guest
       .post(endpoint)
       .send({ ...chat, history: [{ role: "system", content: "Other" }] })
       .expect(400);
+    await guest
+      .post(endpoint)
+      .send({ ...chat, message: "Привет!" })
+      .expect(200, { answer: "Привет! Чем могу помочь в Blizu?" });
     assert.equal(forwarded.length, 0);
-    await client
+    await guest
       .post(endpoint)
       .send(chat)
       .expect(200, { answer: "Откройте раздел «Мои заказы»." });
     assert.equal(forwarded[0].url, "/api/chat");
     assert.equal(forwarded[0].payload.model, "qwen3:8b");
     assert.equal(forwarded[0].payload.stream, false);
+    assert.equal(forwarded[0].payload.keep_alive, "15m");
     const messages = forwarded[0].payload.messages as {
       role: string;
       content: string;
@@ -183,9 +208,44 @@ test("Ollama chat is opt-in, requires a session and restricts forwarded requests
       ["system", "user"],
     );
     assert.equal(messages[1].content, chat.message);
-    await client.post(endpoint).send(chat).expect(503);
+    await guest.post(endpoint).send(chat).expect(503);
+
+    const listenAddress = http.address();
+    assert.ok(listenAddress && typeof listenAddress === "object");
+    const response = await fetch(
+      `http://127.0.0.1:${listenAddress.port}${endpoint}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: chatStreamType },
+        body: JSON.stringify(chat),
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("X-Accel-Buffering"), "no");
+    assert.ok(response.body);
+    const events = readJsonLines(response.body);
+    assert.deepEqual(await events.next(), {
+      value: { delta: "Откройте " },
+      done: false,
+    });
+    finishStream();
+    assert.deepEqual(await events.next(), {
+      value: { delta: "раздел «Мои заказы»." },
+      done: false,
+    });
+    assert.deepEqual(await events.next(), {
+      value: { done: true },
+      done: false,
+    });
+    assert.equal((await events.next()).done, true);
+    assert.equal(forwarded[2].payload.stream, true);
   } finally {
+    finishStream();
+    http.closeAllConnections();
+    await new Promise<void>((resolve) => http.close(() => resolve()));
     enabled.cleanup();
+    upstream.closeAllConnections();
     await new Promise<void>((resolve) => upstream.close(() => resolve()));
   }
 });

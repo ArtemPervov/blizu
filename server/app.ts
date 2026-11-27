@@ -396,7 +396,7 @@ export function createApp(options: AppOptions = {}) {
     res.json({ ok: true });
   });
 
-  if (options.assistant) registerAssistant(app, requireUser, options.assistant);
+  if (options.assistant) registerAssistant(app, options.assistant);
 
   app.get("/api/listings", (req, res) => {
     const input = z

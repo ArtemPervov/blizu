@@ -55,7 +55,7 @@ import { useAvailableListings } from "./available-listings";
 import { ReportModal, type ReportTarget } from "./components/ReportButton";
 import { CityPicker } from "./components/CityPicker";
 import { orderHelpPath } from "./market-copy";
-import { AssistantLink, AssistantPage } from "./AssistantPage";
+import { AssistantWidget } from "./AssistantPage";
 export type CreateAction = (kind: CreateKind, preset?: CreatePreset) => void;
 
 export default function App() {
@@ -450,7 +450,9 @@ export default function App() {
           {meta?.assistantEnabled && (
             <Route
               path="/assistant"
-              element={<AssistantPage signIn={() => setAuthOpen(true)} />}
+              element={
+                <Navigate to="/" replace state={{ openAssistant: true }} />
+              }
             />
           )}
           <Route
@@ -500,8 +502,8 @@ export default function App() {
         </NavLink>
       </nav>
       <CompareTray />
-      {meta?.assistantEnabled && location.pathname !== "/assistant" && (
-        <AssistantLink />
+      {meta?.assistantEnabled && (
+        <AssistantWidget openOnLoad={location.state?.openAssistant === true} />
       )}
       <footer className="site-footer">
         <div className="footer-main">

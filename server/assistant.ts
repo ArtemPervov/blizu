@@ -1,6 +1,11 @@
-import type { Express, RequestHandler } from "express";
-import { rateLimit } from "express-rate-limit";
+import type { Express, Response } from "express";
+import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { z } from "zod";
+import {
+  chatStreamType,
+  readJsonLines,
+  type ChatEvent,
+} from "../shared/assistant-stream.js";
 import type { AuthRequest } from "./app.js";
 import { HttpError } from "./errors.js";
 
@@ -34,8 +39,18 @@ const chatInput = z.strictObject({
 });
 
 const modelReply = z.object({
-  message: z.object({ content: z.string().trim().min(1) }),
+  message: z.object({ content: z.string() }).optional(),
+  done: z.boolean().optional(),
+  error: z.string().optional(),
 });
+
+const greeting =
+  /^(привет|здравствуйте|здравствуй|добрый день|доброе утро|добрый вечер|hi|hello|hey|ćao|cao|zdravo|dobar dan)[!.\s]*$/iu;
+const greetings = {
+  ru: "Привет! Чем могу помочь в Blizu?",
+  en: "Hello! How can I help you with Blizu?",
+  me: "Zdravo! Kako mogu da vam pomognem u Blizu?",
+};
 
 const instructions = `You answer questions about using Blizu, a marketplace for goods and services in Montenegro. Keep answers short and based on the facts below. If the facts do not cover a question, say so. Never claim to have opened a page, searched live listings, handled a dispute, or published anything. Do not ask for passwords or verification codes.
 
@@ -79,16 +94,26 @@ export function assistantConfig(
   };
 }
 
-export function registerAssistant(
-  app: Express,
-  requireUser: RequestHandler,
-  config: AssistantConfig,
-) {
+function writeEvent(res: Response, event: ChatEvent) {
+  if (!res.headersSent) {
+    res.set({
+      "Content-Type": `${chatStreamType}; charset=utf-8`,
+      "Cache-Control": "no-store, no-transform",
+      "X-Accel-Buffering": "no",
+    });
+  }
+  res.write(JSON.stringify(event) + "\n");
+}
+
+export function registerAssistant(app: Express, config: AssistantConfig) {
   const endpoint = new URL("/api/chat", config.baseUrl);
   const limit = rateLimit({
     windowMs: 60_000,
     limit: 12,
-    keyGenerator: (req: AuthRequest) => req.user!.id,
+    keyGenerator: (req: AuthRequest) =>
+      req.user
+        ? `user:${req.user.id}`
+        : `ip:${ipKeyGenerator(req.ip ?? req.socket.remoteAddress ?? "")}`,
     standardHeaders: "draft-8",
     legacyHeaders: false,
     message: {
@@ -96,8 +121,20 @@ export function registerAssistant(
     },
   });
   let running = 0;
-  app.post("/api/assistant/chat", requireUser, limit, async (req, res) => {
+  app.post("/api/assistant/chat", limit, async (req, res) => {
     const input = chatInput.parse(req.body);
+    const streaming = req.accepts(["json", chatStreamType]) === chatStreamType;
+    if (greeting.test(input.message)) {
+      const answer = greetings[input.language];
+      if (streaming) {
+        writeEvent(res, { delta: answer });
+        writeEvent(res, { done: true });
+        res.end();
+      } else {
+        res.json({ answer });
+      }
+      return;
+    }
     if (running >= 2) {
       throw new HttpError(429, "Помощник занят. Попробуйте чуть позже.");
     }
@@ -122,8 +159,9 @@ export function registerAssistant(
             ...input.history,
             { role: "user", content: input.message },
           ],
-          stream: false,
+          stream: streaming,
           think: false,
+          keep_alive: "15m",
           options: { num_ctx: 4096, num_predict: 500 },
         }),
       });
@@ -131,17 +169,46 @@ export function registerAssistant(
         await response.body?.cancel();
         throw new Error("Ollama rejected request");
       }
-      const { message } = modelReply.parse(await response.json());
-      res.json({ answer: message.content.slice(0, answerLimit) });
+      if (!streaming) {
+        const { message, error } = modelReply.parse(await response.json());
+        if (error || !message?.content.trim())
+          throw new Error("Empty model response");
+        res.json({ answer: message.content.trim().slice(0, answerLimit) });
+        return;
+      }
+      if (!response.body) throw new Error("Missing model response stream");
+      let answer = "";
+      let done = false;
+      for await (const value of readJsonLines(response.body)) {
+        const chunk = modelReply.parse(value);
+        if (chunk.error) throw new Error("Ollama stream failed");
+        const delta = chunk.message?.content.slice(
+          0,
+          answerLimit - answer.length,
+        );
+        if (delta) {
+          answer += delta;
+          writeEvent(res, { delta });
+        }
+        if (chunk.done || answer.length >= answerLimit) {
+          done = true;
+          break;
+        }
+      }
+      if (!done || !answer.trim()) throw new Error("Incomplete model response");
+      writeEvent(res, { done: true });
+      res.end();
     } catch {
       if (controller.signal.aborted) return;
-      if (timeout.aborted) {
-        throw new HttpError(
-          504,
-          "Модель не успела ответить. Попробуйте ещё раз.",
-        );
+      const error = timeout.aborted
+        ? new HttpError(504, "Модель не успела ответить. Попробуйте ещё раз.")
+        : new HttpError(503, "AI помощник временно недоступен.");
+      if (res.headersSent) {
+        writeEvent(res, { error: error.message });
+        res.end();
+        return;
       }
-      throw new HttpError(503, "ИИ-помощник временно недоступен.");
+      throw error;
     } finally {
       running--;
       res.off("close", abort);

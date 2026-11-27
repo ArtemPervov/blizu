@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowUp, Sparkles } from "lucide-react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { ArrowUp, Sparkles, X } from "lucide-react";
 import { Link } from "react-router-dom";
-import { api, json, useAuth, useI18n } from "./lib";
-import { Loading } from "./components/ui";
+import { chatStreamType, readJsonLines } from "../shared/assistant-stream";
+import { json, useI18n } from "./lib";
 
 const copy = {
   ru: {
-    title: "ИИ-помощник",
+    title: "AI помощник",
     intro: "Подскажу, как пользоваться Blizu.",
     questions: [
       "Как добавить объявление?",
@@ -17,8 +17,7 @@ const copy = {
     send: "Отправить",
     loading: "Помощник отвечает…",
     error: "Ответ пока не получен. Попробуйте отправить вопрос ещё раз.",
-    signIn: "Войдите, чтобы задать вопрос помощнику.",
-    login: "Войти",
+    close: "Закрыть чат",
     catalog: "Каталог",
     orders: "Мои заказы",
   },
@@ -34,8 +33,7 @@ const copy = {
     send: "Send",
     loading: "The assistant is replying…",
     error: "An answer is unavailable. Please send your question again.",
-    signIn: "Sign in to ask the assistant a question.",
-    login: "Sign in",
+    close: "Close chat",
     catalog: "Catalog",
     orders: "My orders",
   },
@@ -51,78 +49,119 @@ const copy = {
     send: "Pošalji",
     loading: "Pomoćnik odgovara…",
     error: "Odgovor trenutno nije dostupan. Pošaljite pitanje ponovo.",
-    signIn: "Prijavite se da biste postavili pitanje pomoćniku.",
-    login: "Prijavi se",
+    close: "Zatvori razgovor",
     catalog: "Katalog",
     orders: "Moje narudžbe",
   },
 };
 
-export function AssistantLink() {
-  const { language } = useI18n();
-  return (
-    <Link className="button primary assistant-launcher" to="/assistant">
-      <Sparkles size={17} aria-hidden="true" />
-      {copy[language].title}
-    </Link>
-  );
-}
-
-export function AssistantPage({ signIn }: { signIn: () => void }) {
-  const { user, loading } = useAuth();
+export function AssistantWidget({ openOnLoad }: { openOnLoad: boolean }) {
   const { language } = useI18n();
   const text = copy[language];
+  const [open, setOpen] = useState(openOnLoad);
+  const panelId = useId();
+  const titleId = useId();
+  const launcher = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (openOnLoad) setOpen(true);
+  }, [openOnLoad]);
+  useEffect(() => {
+    if (open) closeButton.current?.focus();
+  }, [open]);
+
+  function close() {
+    setOpen(false);
+    launcher.current?.focus();
+  }
+
   return (
-    <section className="page-shell assistant-page">
-      <header className="page-heading">
-        <h1>{text.title}</h1>
-        <p>{text.intro}</p>
-      </header>
-      {loading ? (
-        <Loading />
-      ) : user ? (
-        <AssistantChat key={user.id} />
-      ) : (
-        <div className="assistant-chat">
-          <p>{text.signIn}</p>
-          <button className="button primary" onClick={signIn}>
-            {text.login}
+    <div className="assistant-widget">
+      <button
+        ref={launcher}
+        type="button"
+        className="button primary assistant-launcher"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => (open ? close() : setOpen(true))}
+      >
+        <Sparkles size={17} aria-hidden="true" />
+        {text.title}
+      </button>
+      <section
+        className="assistant-panel"
+        id={panelId}
+        hidden={!open}
+        role="dialog"
+        aria-labelledby={titleId}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            close();
+          }
+        }}
+      >
+        <header className="assistant-header">
+          <div>
+            <h2 id={titleId}>{text.title}</h2>
+            <p>{text.intro}</p>
+          </div>
+          <button
+            ref={closeButton}
+            type="button"
+            className="assistant-close"
+            aria-label={text.close}
+            onClick={close}
+          >
+            <X size={18} aria-hidden="true" />
           </button>
-        </div>
-      )}
-    </section>
+        </header>
+        <AssistantChat visible={open} close={close} />
+      </section>
+    </div>
   );
 }
 
 type Turn = { question: string; answer: string };
 
-function AssistantChat() {
+function AssistantChat({
+  visible,
+  close,
+}: {
+  visible: boolean;
+  close: () => void;
+}) {
   const { language } = useI18n();
   const text = copy[language];
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState("");
-  const [pending, setPending] = useState("");
-  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState<Turn | null>(null);
+  const [status, setStatus] = useState<"idle" | "pending" | "failed">("idle");
   const active = useRef<AbortController | null>(null);
   const transcript = useRef<HTMLDivElement>(null);
+  const followLatest = useRef(true);
 
   useEffect(() => () => active.current?.abort(), []);
   useEffect(() => {
-    if (transcript.current)
+    if (visible && followLatest.current && transcript.current)
       transcript.current.scrollTop = transcript.current.scrollHeight;
-  }, [turns, pending]);
+  }, [turns, attempt, visible]);
 
   async function send(raw: string) {
     const message = raw.trim();
     if (!message || active.current) return;
     const controller = new AbortController();
     active.current = controller;
+    followLatest.current = true;
     setQuestion("");
-    setFailed(false);
-    setPending(message);
+    setAttempt({ question: message, answer: "" });
+    setStatus("pending");
     try {
-      const { answer } = await api<{ answer: string }>("/assistant/chat", {
+      const response = await fetch("/api/assistant/chat", {
         method: "POST",
+        headers: { "Content-Type": "application/json", Accept: chatStreamType },
         body: json({
           language,
           message,
@@ -133,20 +172,39 @@ function AssistantChat() {
         }),
         signal: controller.signal,
       });
-      if (!controller.signal.aborted) {
-        setTurns((previous) => [
-          ...previous.slice(-19),
-          { question: message, answer },
-        ]);
+      if (!response.ok || !response.body)
+        throw new Error("Chat request failed");
+      let answer = "";
+      let done = false;
+      for await (const value of readJsonLines(response.body)) {
+        if (controller.signal.aborted) return;
+        if (!value || typeof value !== "object" || "error" in value) {
+          throw new Error("Chat stream failed");
+        }
+        if ("delta" in value && typeof value.delta === "string") {
+          answer += value.delta;
+          setAttempt({ question: message, answer });
+        }
+        if ("done" in value && value.done === true) {
+          done = true;
+          break;
+        }
       }
+      if (controller.signal.aborted) return;
+      if (!done || !answer.trim()) throw new Error("Incomplete chat response");
+      setTurns((previous) => [
+        ...previous.slice(-19),
+        { question: message, answer },
+      ]);
+      setAttempt(null);
+      setStatus("idle");
     } catch {
       if (!controller.signal.aborted) {
         setQuestion(message);
-        setFailed(true);
+        setStatus("failed");
       }
     } finally {
       active.current = null;
-      if (!controller.signal.aborted) setPending("");
     }
   }
 
@@ -155,9 +213,10 @@ function AssistantChat() {
     void send(question);
   }
 
+  const pending = status === "pending";
   return (
     <div className="assistant-chat">
-      {!turns.length && !pending && !failed && (
+      {!turns.length && status === "idle" && (
         <div className="assistant-questions">
           {text.questions.map((prompt) => (
             <button
@@ -171,12 +230,19 @@ function AssistantChat() {
           ))}
         </div>
       )}
-      {(turns.length > 0 || pending) && (
+      {(turns.length > 0 || attempt) && (
         <div
           ref={transcript}
           className="assistant-transcript"
           role="log"
           aria-label={text.title}
+          onScroll={({ currentTarget }) => {
+            followLatest.current =
+              currentTarget.scrollHeight -
+                currentTarget.scrollTop -
+                currentTarget.clientHeight <
+              24;
+          }}
         >
           {turns.map(({ question, answer }, index) => (
             <div className="assistant-turn" key={index}>
@@ -184,15 +250,22 @@ function AssistantChat() {
               <p className="assistant-answer">{answer}</p>
             </div>
           ))}
-          {pending && <p className="assistant-question">{pending}</p>}
+          {attempt && (
+            <div className="assistant-turn" aria-live="off">
+              <p className="assistant-question">{attempt.question}</p>
+              {attempt.answer && (
+                <p className="assistant-answer">{attempt.answer}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
-      {pending && (
+      {pending && !attempt?.answer && (
         <p className="muted assistant-status" role="status">
           {text.loading}
         </p>
       )}
-      {failed && (
+      {status === "failed" && (
         <p className="muted assistant-status" role="alert">
           {text.error}
         </p>
@@ -215,8 +288,12 @@ function AssistantChat() {
         </button>
       </form>
       <nav className="assistant-links" aria-label={text.title}>
-        <Link to="/#catalog">{text.catalog}</Link>
-        <Link to="/orders">{text.orders}</Link>
+        <Link to="/#catalog" onClick={close}>
+          {text.catalog}
+        </Link>
+        <Link to="/orders" onClick={close}>
+          {text.orders}
+        </Link>
       </nav>
     </div>
   );

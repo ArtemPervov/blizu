@@ -185,9 +185,10 @@ function header() {
   return within(screen.getByRole("banner"));
 }
 
-test("the enabled assistant can be opened and renders a reply for a signed-in user", async () => {
-  await agent.post("/api/auth/demo").send({ role: "customer" }).expect(200);
+test("the guest assistant streams a reply without leaving the current page", async () => {
   const baseFetch = globalThis.fetch;
+  let chatStream!: ReadableStreamDefaultController<Uint8Array>;
+  const encoder = new TextEncoder();
   globalThis.fetch = async (input, init) => {
     if (input === "/api/meta") {
       const meta = await (await baseFetch(input, init)).json();
@@ -195,21 +196,43 @@ test("the enabled assistant can be opened and renders a reply for a signed-in us
     }
     if (input === "/api/assistant/chat") {
       assert.equal(JSON.parse(String(init?.body)).message, "Где мои заказы?");
-      return Response.json({ answer: "Откройте раздел «Мои заказы»." });
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            chatStream = controller;
+            const first = encoder.encode('{"delta":"Откройте "}\n');
+            controller.enqueue(first.slice(0, 11));
+            controller.enqueue(first.slice(11));
+          },
+        }),
+        { headers: { "Content-Type": "application/x-ndjson" } },
+      );
     }
     return baseFetch(input, init);
   };
-  mount();
-  fireEvent.click(await screen.findByRole("link", { name: "ИИ-помощник" }));
-  await screen.findByRole("heading", { name: "ИИ-помощник" });
+  mount("/requests");
+  const pageHeading = await screen.findByRole("heading", { level: 1 });
+  const launcher = await screen.findByRole("button", { name: "AI помощник" });
+  fireEvent.click(launcher);
+  const dialog = screen.getByRole("dialog", { name: "AI помощник" });
+  assert.equal(screen.getByRole("heading", { level: 1 }), pageHeading);
   fireEvent.change(await screen.findByRole("textbox", { name: "Ваш вопрос" }), {
     target: { value: "Где мои заказы?" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Отправить" }));
   const transcript = await screen.findByRole("log");
+  assert.ok(await within(transcript).findByText("Откройте"));
+  chatStream.enqueue(
+    encoder.encode('{"delta":"раздел «Мои заказы»."}\n{"done":true}\n'),
+  );
+  chatStream.close();
   assert.ok(
     await within(transcript).findByText("Откройте раздел «Мои заказы»."),
   );
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  assert.equal(screen.queryByRole("dialog", { name: "AI помощник" }), null);
+  fireEvent.click(launcher);
+  assert.ok(await screen.findByText("Откройте раздел «Мои заказы»."));
 });
 
 test("the hero keeps a decorative contour background with reduced motion and leaves its title and search usable", async () => {
