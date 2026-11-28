@@ -179,7 +179,7 @@ export function registerAssistant(
     standardHeaders: "draft-8",
     legacyHeaders: false,
     message: {
-      error: "Слишком много запросов к помощнику. Попробуйте через минуту.",
+      error: "Слишком много запросов к ассистенту. Попробуйте через минуту.",
     },
   });
   let running = 0;
@@ -215,7 +215,7 @@ export function registerAssistant(
       }
     }
     if (running >= 2) {
-      throw new HttpError(429, "Помощник занят. Попробуйте чуть позже.");
+      throw new HttpError(429, "Ассистент занят. Попробуйте чуть позже.");
     }
     const previousQuestion = input.history.at(-2)?.content;
     const draftKind =
@@ -316,7 +316,7 @@ export function registerAssistant(
       if (controller.signal.aborted) return;
       const error = timeout.aborted
         ? new HttpError(504, "Модель не успела ответить. Попробуйте ещё раз.")
-        : new HttpError(503, "AI помощник временно недоступен.");
+        : new HttpError(503, "AI ассистент временно недоступен.");
       if (res.headersSent) {
         writeEvent(res, { error: error.message });
         res.end();

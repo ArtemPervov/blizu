@@ -22,7 +22,7 @@ import { createReplyReveal, type ReplyFrame } from "./assistant-reply";
 
 const copy = {
   ru: {
-    title: "AI помощник",
+    title: "AI ассистент",
     intro: "Найду объявления и помогу разместить ваше.",
     questions: [
       "Найди объявление по авто",
@@ -32,7 +32,7 @@ const copy = {
     ],
     input: "Ваш вопрос",
     send: "Отправить",
-    loading: "Помощник отвечает…",
+    loading: "Ассистент отвечает…",
     error: "Ответ пока не получен. Попробуйте отправить вопрос ещё раз.",
     close: "Закрыть чат",
     catalog: "Каталог",
@@ -66,7 +66,7 @@ const copy = {
     priceUnknown: "Price not listed",
   },
   me: {
-    title: "AI pomoćnik",
+    title: "AI asistent",
     intro: "Pronađite oglase i pripremite svoj.",
     questions: [
       "Pronađi oglase za vozila",
@@ -76,7 +76,7 @@ const copy = {
     ],
     input: "Vaše pitanje",
     send: "Pošalji",
-    loading: "Pomoćnik odgovara…",
+    loading: "Asistent odgovara…",
     error: "Odgovor trenutno nije dostupan. Pošaljite pitanje ponovo.",
     close: "Zatvori razgovor",
     catalog: "Katalog",

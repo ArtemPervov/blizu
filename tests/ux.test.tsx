@@ -212,9 +212,9 @@ test("the guest assistant streams a reply without leaving the current page", asy
   };
   mount("/requests");
   const pageHeading = await screen.findByRole("heading", { level: 1 });
-  const launcher = await screen.findByRole("button", { name: "AI помощник" });
+  const launcher = await screen.findByRole("button", { name: "AI ассистент" });
   fireEvent.click(launcher);
-  const dialog = screen.getByRole("dialog", { name: "AI помощник" });
+  const dialog = screen.getByRole("dialog", { name: "AI ассистент" });
   assert.equal(screen.getByRole("heading", { level: 1 }), pageHeading);
   fireEvent.change(await screen.findByRole("textbox", { name: "Ваш вопрос" }), {
     target: { value: "Где мои заказы?" },
@@ -230,7 +230,7 @@ test("the guest assistant streams a reply without leaving the current page", asy
     await within(transcript).findByText("Откройте раздел «Мои заказы»."),
   );
   fireEvent.keyDown(dialog, { key: "Escape" });
-  assert.equal(screen.queryByRole("dialog", { name: "AI помощник" }), null);
+  assert.equal(screen.queryByRole("dialog", { name: "AI ассистент" }), null);
   fireEvent.click(launcher);
   assert.ok(await screen.findByText("Откройте раздел «Мои заказы»."));
 });
@@ -266,11 +266,11 @@ for (const kind of ["delta", "catalog"] as const) {
     };
     try {
       mount("/requests");
-      fireEvent.click(await screen.findByRole("button", { name: "AI помощник" }));
+      fireEvent.click(await screen.findByRole("button", { name: "AI ассистент" }));
       fireEvent.click(
         screen.getByRole("button", { name: "Где посмотреть мои заказы?" }),
       );
-      const dialog = screen.getByRole("dialog", { name: "AI помощник" });
+      const dialog = screen.getByRole("dialog", { name: "AI ассистент" });
       assert.ok(within(dialog).getByRole("status"));
       const frames = new Set<string>();
       const observer = new MutationObserver(() => {
@@ -352,9 +352,9 @@ test("guest assistant links to catalog matches and opens an explicit match", asy
   };
   mount("/requests");
   const page = await screen.findByRole("heading", { level: 1 });
-  fireEvent.click(await screen.findByRole("button", { name: "AI помощник" }));
+  fireEvent.click(await screen.findByRole("button", { name: "AI ассистент" }));
   fireEvent.click(screen.getByRole("button", { name: "Найди объявление по авто" }));
-  const chat = within(screen.getByRole("dialog", { name: "AI помощник" }));
+  const chat = within(screen.getByRole("dialog", { name: "AI ассистент" }));
   const result = await chat.findByRole("link", { name: (name) => name.startsWith(title) });
   assert.equal(result.getAttribute("href"), '/listings/' + encodeURIComponent(id));
   assert.equal(chat.getByRole("link", { name: "Открыть каталог" }).getAttribute("href"), "/?category=auto#catalog");
@@ -364,7 +364,7 @@ test("guest assistant links to catalog matches and opens an explicit match", asy
   });
   fireEvent.click(chat.getByRole("button", { name: "Отправить" }));
   await screen.findByRole("heading", { name: title, level: 1 });
-  assert.equal(screen.queryByRole("dialog", { name: "AI помощник" }), null);
+  assert.equal(screen.queryByRole("dialog", { name: "AI ассистент" }), null);
 });
 
 test("assistant listing drafts prefill the regular publication form", async () => {
@@ -395,7 +395,7 @@ test("assistant listing drafts prefill the regular publication form", async () =
     return baseFetch(input, init);
   };
   mount();
-  fireEvent.click(await screen.findByRole("button", { name: "AI помощник" }));
+  fireEvent.click(await screen.findByRole("button", { name: "AI ассистент" }));
   fireEvent.click(screen.getByRole("button", { name: "Хочу разместить объявление" }));
   fireEvent.click(await screen.findByRole("button", { name: "Проверить и опубликовать" }));
   const form = await screen.findByRole("dialog");
@@ -439,8 +439,8 @@ test("a multiline chat request survives guest sign-in and publishes as a custome
   };
 
   mount("/requests");
-  fireEvent.click(await screen.findByRole("button", { name: "AI помощник" }));
-  const assistant = within(screen.getByRole("dialog", { name: "AI помощник" }));
+  fireEvent.click(await screen.findByRole("button", { name: "AI ассистент" }));
+  const assistant = within(screen.getByRole("dialog", { name: "AI ассистент" }));
   const input = assistant.getByRole("textbox", { name: "Ваш вопрос" }) as HTMLTextAreaElement;
   assert.equal(input.tagName, "TEXTAREA");
   assert.equal(assistant.queryByText(/Enter — новая строка/), null);
