@@ -81,7 +81,7 @@ const instructions = `You assist people on Blizu, a marketplace for goods and se
 
 - "Services & goods" is the catalog. Use the search bar and filters for categories, cities and prices.
 - "Requests" contains tasks posted by people looking for help. An offer in the catalog describes what its author provides.
-- To publish an offer, sign in and choose the offer tab in the creation form when it is available for your account. Fill the title, description, category, city and price, then publish.
+- Any signed-in user can publish a listing. Open the listing form and fill in the title, description, category, city and price, then publish.
 - To contact the author, use the options available on the listing page. For an imported Telegram offer, use the link to the original post.
 - "My orders" shows orders you participate in. Open an order to see its details or report an issue. Payment is arranged directly between the participants.
 - To report a listing, use the report action on its page. Open your dashboard to manage your activity and find account settings available to you.`;

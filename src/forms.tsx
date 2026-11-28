@@ -14,12 +14,7 @@ import {
   UserRound,
   Wrench,
 } from "lucide-react";
-import {
-  CATEGORIES,
-  CITIES,
-  isMarketplaceUser,
-  type Listing,
-} from "../shared/types";
+import { CATEGORIES, CITIES, type Listing } from "../shared/types";
 import { api, json, useAuth, useI18n, useToast } from "./lib";
 import { Field, FormError, Modal } from "./components/ui";
 import { categoryName, cityName } from "./market-copy";
@@ -361,23 +356,21 @@ export function CreateModal({
             {tr("Доставка")}
           </button>
         )}
-        {isMarketplaceUser(user?.role) && (
-          <button
-            disabled={mutation.isPending}
-            className={kind === "listing" ? "active" : ""}
-            aria-pressed={kind === "listing"}
-            onClick={() => {
-              setKind("listing");
-              setSelectedCategory(
-                drafts.listing?.category ?? preset?.category ?? "repair",
-              );
-              mutation.reset();
-            }}
-          >
-            <BriefcaseBusiness size={16} />
-            {tr("Предложение")}
-          </button>
-        )}
+        <button
+          disabled={mutation.isPending}
+          className={kind === "listing" ? "active" : ""}
+          aria-pressed={kind === "listing"}
+          onClick={() => {
+            setKind("listing");
+            setSelectedCategory(
+              drafts.listing?.category ?? preset?.category ?? "repair",
+            );
+            mutation.reset();
+          }}
+        >
+          <BriefcaseBusiness size={16} />
+          {tr("Предложение")}
+        </button>
       </div>
       <form
         key={kind}

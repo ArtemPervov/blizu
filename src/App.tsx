@@ -338,14 +338,10 @@ export default function App() {
             </div>
             <button
               className="button primary header-create"
-              onClick={() =>
-                createAction(user?.role === "provider" ? "listing" : "request")
-              }
+              onClick={() => createAction("listing")}
             >
               <Plus size={18} />
-              {user?.role === "provider"
-                ? tr("Добавить услугу")
-                : tr("Создать заявку")}
+              {t.newListing}
             </button>
             <button
               className="icon-button mobile-toggle"
@@ -381,12 +377,8 @@ export default function App() {
             {user?.isOperator && (
               <NavLink to="/operator">{tr("Панель оператора")}</NavLink>
             )}
-            <button
-              onClick={() =>
-                createAction(user?.role === "provider" ? "listing" : "request")
-              }
-            >
-              {user?.role === "provider" ? t.newListing : t.newRequest}
+            <button onClick={() => createAction("listing")}>
+              {t.newListing}
             </button>
           </nav>
         )}

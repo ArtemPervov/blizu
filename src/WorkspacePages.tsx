@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import {
   STATUS_LABELS,
-  isMarketplaceUser,
   type Incident,
   type Listing,
   type Order,
@@ -345,7 +344,7 @@ export function DashboardPage({
   const available = [
     "overview",
     "requests",
-    ...(isMarketplaceUser(user?.role) ? ["listings"] : []),
+    "listings",
     ...(user?.role === "arbiter" ? ["incidents"] : []),
   ];
   const tab = available.includes(params.get("tab") || "")
@@ -362,15 +361,11 @@ export function DashboardPage({
   const tabs = [
     { id: "overview", label: tr("Обзор") },
     { id: "requests", label: tr("Мои заявки"), count: data?.requests.length },
-    ...(isMarketplaceUser(user.role)
-      ? [
-          {
-            id: "listings",
-            label: tr("Предложения"),
-            count: data?.listings.length,
-          },
-        ]
-      : []),
+    {
+      id: "listings",
+      label: tr("Предложения"),
+      count: data?.listings.length,
+    },
     ...(user.role === "arbiter"
       ? [
           {
@@ -405,14 +400,10 @@ export function DashboardPage({
         </div>
         <button
           className="button primary"
-          onClick={() =>
-            create(user.role === "provider" ? "listing" : "request")
-          }
+          onClick={() => create("listing")}
         >
           <Plus size={17} />
-          {user.role === "provider"
-            ? tr("Добавить предложение")
-            : tr("Новая заявка")}
+          {tr("Добавить предложение")}
         </button>
       </div>
       <nav

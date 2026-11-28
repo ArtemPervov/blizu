@@ -182,7 +182,7 @@ const dictionary = {
     home: "Главная",
     mobileNav: "Мобильная навигация",
     requestsShort: "Заявки",
-    newListing: "Добавить услугу",
+    newListing: "Добавить объявление",
     newRequest: "Создать заявку",
     from: "от",
     details: "Подробнее",

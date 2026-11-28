@@ -389,7 +389,7 @@ export function createApp(options: AppOptions = {}) {
       userId,
     );
   app.get("/api/profile", requireUser, (req: AuthRequest, res) => {
-    const { id, name, city, contact, role } = req.user!;
+    const { id, name, city, contact } = req.user!;
     const details = profileDetails(id);
     const profile: AccountProfile = {
       name,
@@ -398,19 +398,13 @@ export function createApp(options: AppOptions = {}) {
       bio: details?.bio ?? "",
       telegram: details?.telegram ?? "",
       viber: details?.viber ?? "",
-      showListingContacts:
-        isMarketplaceUser(role) && !!details?.showListingContacts,
+      showListingContacts: !!details?.showListingContacts,
     };
     res.json({ profile });
   });
   app.patch("/api/profile", requireUser, (req: AuthRequest, res) => {
-    const input = accountProfile.parse(req.body);
+    const profile = accountProfile.parse(req.body);
     const user = req.user!;
-    const profile = {
-      ...input,
-      showListingContacts:
-        isMarketplaceUser(user.role) && input.showListingContacts,
-    };
     store.transaction(() => {
       store.run(
         "UPDATE users SET name=?,city=?,contact=? WHERE id=?",
@@ -702,7 +696,7 @@ export function createApp(options: AppOptions = {}) {
     }>(
       `SELECT u.id,u.name,u.city,u.verified,COALESCE(p.bio,'') bio FROM users u
        LEFT JOIN user_profiles p ON p.userId=u.id
-       WHERE u.id=? AND u.role IN ('customer','provider') AND u.id NOT LIKE 'source-%'
+       WHERE u.id=? AND u.id NOT LIKE 'source-%'
        AND EXISTS(SELECT 1 FROM listings l WHERE l.providerId=u.id AND ${publicListings})
        AND NOT EXISTS(SELECT 1 FROM account_restrictions ar WHERE ar.userId=u.id)`,
       id,
@@ -755,7 +749,6 @@ export function createApp(options: AppOptions = {}) {
   app.post(
     "/api/listings",
     requireUser,
-    requireMarketplaceUser,
     (req: AuthRequest, res) => {
       const input = z
         .object({

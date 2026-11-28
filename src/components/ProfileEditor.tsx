@@ -2,12 +2,7 @@ import { useUiText } from "../lib";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Globe2, Mail, MessageCircle, Save, UserRound } from "lucide-react";
-import {
-  CITIES,
-  isMarketplaceUser,
-  type AccountProfile,
-  type User,
-} from "../../shared/types";
+import { CITIES, type AccountProfile, type User } from "../../shared/types";
 import { api, json, useI18n, useToast, type Language } from "../lib";
 import { cityName } from "../market-copy";
 import { ErrorState, Field, FormError, Loading } from "./ui";
@@ -77,7 +72,6 @@ function ProfileForm({
   const { language } = useI18n();
   const client = useQueryClient();
   const toast = useToast();
-  const provider = isMarketplaceUser(user.role);
   const dirty = (Object.keys(profile) as (keyof AccountProfile)[]).some(
     (field) => draft[field] !== profile[field],
   );
@@ -164,19 +158,13 @@ function ProfileForm({
               value={draft.bio}
               maxLength={500}
               aria-describedby="profile-bio-note"
-              placeholder={
-                provider
-                  ? tr("Расскажите, чем вы можете помочь")
-                  : tr("Добавьте короткое описание")
-              }
+              placeholder={tr("Добавьте короткое описание")}
               onChange={(event) => edit("bio", event.target.value)}
             />
           </Field>
           <div className="profile-bio-meta">
             <small id="profile-bio-note">
-              {provider
-                ? tr("Описание видно в ваших объявлениях.")
-                : tr("Описание видно в вашем кабинете.")}
+              {tr("Описание видно в ваших объявлениях.")}
             </small>
             <small>{draft.bio.length} / 500</small>
           </div>
@@ -212,28 +200,26 @@ function ProfileForm({
               />
             </Field>
           </div>
-          {provider && (
-            <label className="profile-publication">
-              <input
-                type="checkbox"
-                name="showListingContacts"
-                checked={draft.showListingContacts}
-                onChange={(event) =>
-                  edit("showListingContacts", event.target.checked)
-                }
-              />
-              <span>
-                <strong>
-                  {tr("Показывать Viber и Telegram в объявлениях")}
-                </strong>
-                <small>
-                  {tr(
-                    "Посетители увидят их в объявлениях, где вы не указали отдельные контакты.",
-                  )}
-                </small>
-              </span>
-            </label>
-          )}
+          <label className="profile-publication">
+            <input
+              type="checkbox"
+              name="showListingContacts"
+              checked={draft.showListingContacts}
+              onChange={(event) =>
+                edit("showListingContacts", event.target.checked)
+              }
+            />
+            <span>
+              <strong>
+                {tr("Показывать Viber и Telegram в объявлениях")}
+              </strong>
+              <small>
+                {tr(
+                  "Посетители увидят их в объявлениях, где вы не указали отдельные контакты.",
+                )}
+              </small>
+            </span>
+          </label>
           <Field label={tr("Контакт для заказов")}>
             <input
               name="contact"

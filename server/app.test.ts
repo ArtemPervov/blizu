@@ -540,6 +540,40 @@ test("registration, persistent session, logout and protection against role escal
   }
 });
 
+test("every signed-in role can publish a listing under its own account", async () => {
+  const f = fixture();
+  try {
+    const offer = {
+      title: "Продаю настольный вентилятор",
+      description: "Компактный вентилятор в хорошем состоянии, самовывоз из Бара.",
+      category: "goods",
+      city: "Бар",
+      price: 40,
+      unit: "товар",
+    };
+    const visitor = request(f.app);
+    await visitor.post("/api/listings").send(offer).expect(401);
+
+    for (const role of ["customer", "provider", "arbiter", "operator"]) {
+      const author = await login(f.app, role);
+      const { user } = (await author.get("/api/auth/me").expect(200)).body;
+      const { id } = (
+        await author.post("/api/listings").send(offer).expect(201)
+      ).body;
+      const { item } = (
+        await visitor.get("/api/listings/" + id).expect(200)
+      ).body;
+      assert.equal(item.providerId, user.id);
+      const { items } = (
+        await visitor.get("/api/providers/" + user.id).expect(200)
+      ).body;
+      assert.ok(items.some((listing: { id: string }) => listing.id === id));
+    }
+  } finally {
+    f.cleanup();
+  }
+});
+
 test("listing conversations notify the author and only participants can read or reply", async () => {
   const f = fixture();
   try {
@@ -594,11 +628,11 @@ test("listing conversations notify the author and only participants can read or 
   }
 });
 
-test("listing details publish only contacts explicitly supplied by a provider", async () => {
+test("listing details publish only contacts explicitly shared by the author", async () => {
   const f = fixture();
   try {
     const guest = request(f.app);
-    const provider = await login(f.app, "provider");
+    const provider = await login(f.app, "arbiter");
     await guest.get("/api/profile").expect(401);
     await guest.patch("/api/profile").send({}).expect(401);
     const { profile } = (await provider.get("/api/profile").expect(200)).body;

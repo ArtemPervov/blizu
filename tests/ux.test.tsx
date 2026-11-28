@@ -360,8 +360,8 @@ test("guest assistant links to catalog matches and opens an explicit match", asy
   assert.equal(screen.queryByRole("dialog", { name: "AI ассистент" }), null);
 });
 
-test("assistant listing drafts prefill the regular publication form", async () => {
-  await agent.post("/api/auth/demo").send({ role: "provider" }).expect(200);
+test("an arbiter can publish a listing prepared by the assistant", async () => {
+  await agent.post("/api/auth/demo").send({ role: "arbiter" }).expect(200);
   const draft = {
     title: "Велосипед для города",
     description: "Продаю велосипед в хорошем состоянии, есть подножка.",
@@ -399,7 +399,11 @@ test("assistant listing drafts prefill the regular publication form", async () =
   assert.equal(fixture.store.get("SELECT id FROM listings WHERE title=?", draft.title), undefined);
   fireEvent.click(within(form).getByRole("button", { name: "Опубликовать предложение", exact: true }));
   await screen.findByRole("heading", { name: draft.title, level: 1 });
-  assert.ok(fixture.store.get("SELECT id FROM listings WHERE title=?", draft.title));
+  const published = fixture.store.get<{ providerId: string }>(
+    "SELECT providerId FROM listings WHERE title=?",
+    draft.title,
+  );
+  assert.equal(published?.providerId, "demo-arbiter");
 });
 
 test("a multiline chat request survives guest sign-in and publishes as a customer", async () => {
@@ -923,12 +927,15 @@ test("a request draft survives closing and disappears only after successful publ
   await agent.post("/api/auth/demo").send({ role: "customer" }).expect(200);
   mount();
   await cards();
-  fireEvent.click(
-    header().getByRole("button", { name: "Создать заявку", exact: true }),
-  );
-  let dialog = within(
-    screen.getByRole("dialog", { name: "Что нужно сделать?" }),
-  );
+  function openRequestForm() {
+    fireEvent.click(
+      header().getByRole("button", { name: "Добавить объявление" }),
+    );
+    const form = within(screen.getByRole("dialog", { name: "Ваше предложение" }));
+    fireEvent.click(form.getByRole("button", { name: "Заявка", exact: true }));
+    return within(screen.getByRole("dialog", { name: "Что нужно сделать?" }));
+  }
+  let dialog = openRequestForm();
   fireEvent.change(dialog.getByLabelText("Коротко о задаче"), {
     target: { value: "Нужна помощь с квартирой" },
   });
@@ -941,10 +948,7 @@ test("a request draft survives closing and disappears only after successful publ
     target: { value: "repair" },
   });
   fireEvent.click(dialog.getByRole("button", { name: "Закрыть", exact: true }));
-  fireEvent.click(
-    header().getByRole("button", { name: "Создать заявку", exact: true }),
-  );
-  dialog = within(screen.getByRole("dialog", { name: "Что нужно сделать?" }));
+  dialog = openRequestForm();
   assert.equal(
     (dialog.getByLabelText("Коротко о задаче") as HTMLInputElement).value,
     "Нужна помощь с квартирой",
@@ -1223,7 +1227,31 @@ test("delivery answers expose their expanded state and closing a save notificati
   );
 });
 
-test("personal workspace links to the order list and preserves provider-only listings", async () => {
+test("an arbiter can open the listings tab and publish from the header", async () => {
+  await agent.post("/api/auth/demo").send({ role: "arbiter" }).expect(200);
+  mount("/dashboard?tab=listings");
+  await screen.findByRole("region", { name: "Мои предложения" });
+  fireEvent.click(header().getByRole("button", { name: "Добавить объявление" }));
+  const form = within(screen.getByRole("dialog", { name: "Ваше предложение" }));
+  const title = "Настольная лампа для чтения";
+  fireEvent.change(form.getByLabelText("Название предложения"), {
+    target: { value: title },
+  });
+  fireEvent.change(form.getByLabelText("Расскажите о своём предложении"), {
+    target: {
+      value: "Продаю настольную лампу, она исправна и готова к самовывозу.",
+    },
+  });
+  fireEvent.change(form.getByLabelText("Стоимость от, €"), {
+    target: { value: "25" },
+  });
+  fireEvent.click(form.getByRole("button", { name: "Опубликовать предложение" }));
+  await screen.findByRole("heading", { level: 1, name: title });
+  const { listings } = (await agent.get("/api/dashboard").expect(200)).body;
+  assert.ok(listings.some((item: { title: string }) => item.title === title));
+});
+
+test("personal workspace links to the order list and shows listings", async () => {
   await agent.post("/api/auth/demo").send({ role: "provider" }).expect(200);
   mount("/dashboard");
   await screen.findByRole("heading", { name: "Последние заказы" });
@@ -1301,7 +1329,10 @@ test("private orders require sign-in and arbiter workspace exposes disputes", as
   const tabs = within(
     await screen.findByRole("navigation", { name: "Разделы кабинета" }),
   );
-  assert.ok(!tabs.queryByRole("button", { name: /^Предложения/ }));
+  assert.equal(
+    tabs.getByRole("button", { name: /^Предложения/ }).getAttribute("aria-pressed"),
+    "false",
+  );
   assert.equal(
     tabs.getByRole("button", { name: /^Споры/ }).getAttribute("aria-pressed"),
     "true",
