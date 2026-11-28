@@ -289,11 +289,8 @@ a.assistant-result:hover {
   min-height: 44px;
 }
 
-.assistant-composer-hint {
-  display: block;
-  margin: 6px 2px 0;
-  color: var(--muted);
-  font-size: 11px;
+.assistant-composer .assistant-newline {
+  display: none;
 }
 
 .assistant-links {
@@ -359,7 +356,10 @@ a.assistant-result:hover {
     padding-top: 12px;
   }
 
-  .assistant-composer-hint span {
-    display: none;
+  .assistant-composer .assistant-newline {
+    display: grid;
+    flex: 0 0 44px;
+    place-items: center;
+    padding: 0;
   }
 }

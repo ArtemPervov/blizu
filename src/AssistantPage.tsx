@@ -6,7 +6,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { ArrowUp, ArrowUpRight, Sparkles, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, CornerDownLeft, Sparkles, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   chatStreamType,
@@ -40,8 +40,7 @@ const copy = {
     openCatalog: "Открыть каталог",
     editListing: "Проверить и опубликовать",
     editRequest: "Проверить заявку",
-    newLine: "Enter — новая строка",
-    sendShortcut: "Ctrl / ⌘ + Enter — отправить",
+    newLine: "Новая строка",
     priceUnknown: "Цена не указана",
   },
   en: {
@@ -63,8 +62,7 @@ const copy = {
     openCatalog: "Open catalog",
     editListing: "Review and publish",
     editRequest: "Review request",
-    newLine: "Enter for a new line",
-    sendShortcut: "Ctrl / ⌘ + Enter to send",
+    newLine: "New line",
     priceUnknown: "Price not listed",
   },
   me: {
@@ -86,8 +84,7 @@ const copy = {
     openCatalog: "Otvori katalog",
     editListing: "Provjeri i objavi",
     editRequest: "Provjeri zahtjev",
-    newLine: "Enter za novi red",
-    sendShortcut: "Ctrl / ⌘ + Enter za slanje",
+    newLine: "Novi red",
     priceUnknown: "Cijena nije navedena",
   },
 };
@@ -256,7 +253,6 @@ function AssistantChat({
   const transcript = useRef<HTMLDivElement>(null);
   const lastReply = useRef<HTMLParagraphElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
-  const composerHint = useId();
   const followLatest = useRef(true);
   const latest = attempt ?? turns.at(-1);
 
@@ -368,6 +364,16 @@ function AssistantChat({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void send(question);
+  }
+
+  function insertNewLine() {
+    const field = composer.current;
+    if (!field) return;
+    const { selectionStart, selectionEnd, maxLength, value } = field;
+    if (value.length - (selectionEnd - selectionStart) >= maxLength) return;
+    field.setRangeText("\n", selectionStart, selectionEnd, "end");
+    setQuestion(field.value);
+    field.focus({ preventScroll: true });
   }
 
   const pending = status === "pending";
@@ -517,24 +523,29 @@ function AssistantChat({
           <textarea
             ref={composer}
             aria-label={text.input}
-            aria-describedby={composerHint}
             placeholder={text.input}
             value={question}
             rows={1}
-            enterKeyHint="enter"
+            enterKeyHint="send"
             onChange={(event) => setQuestion(event.target.value)}
             onKeyDown={(event) => {
-              if (
-                event.key === "Enter" &&
-                (event.ctrlKey || event.metaKey) &&
-                !event.nativeEvent.isComposing
-              ) {
-                event.preventDefault();
-                void send(question);
-              }
+              if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+              if (event.altKey || event.metaKey || event.shiftKey) return;
+              event.preventDefault();
+              if (event.ctrlKey) insertNewLine();
+              else void send(question);
             }}
             maxLength={1200}
           />
+          <button
+            type="button"
+            className="button secondary assistant-newline"
+            aria-label={text.newLine}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={insertNewLine}
+          >
+            <CornerDownLeft size={18} aria-hidden="true" />
+          </button>
           <button
             className="button primary"
             aria-label={text.send}
@@ -543,10 +554,6 @@ function AssistantChat({
             <ArrowUp size={19} aria-hidden="true" />
           </button>
         </div>
-        <small className="assistant-composer-hint" id={composerHint}>
-          {text.newLine}
-          <span> · {text.sendShortcut}</span>
-        </small>
       </form>
       <nav className="assistant-links" aria-label={text.title}>
         <Link to="/#catalog" onClick={close}>
