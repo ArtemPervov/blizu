@@ -505,7 +505,14 @@ export default function App() {
       {meta?.assistantEnabled && (
         <AssistantWidget
           openOnLoad={location.state?.openAssistant === true}
-          editListing={(preset) => createAction("listing", preset)}
+          editDraft={(action) => {
+            const preset = { ...action.draft, id: `assistant-${action.id}` };
+            if (action.kind === "requestDraft") {
+              createAction("request", { ...preset, request: action.draft });
+            } else {
+              createAction("listing", preset);
+            }
+          }}
         />
       )}
       <footer className="site-footer">

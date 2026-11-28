@@ -15,11 +15,13 @@ import {
 import { CATEGORIES, CITIES, type Listing } from "../shared/types";
 import { api, json, useAuth, useToast } from "./lib";
 import { Field, FormError, Modal } from "./components/ui";
+import type { RequestDraft } from "../shared/assistant-stream";
 
 export type CreateKind = "request" | "delivery" | "listing";
 export type CreatePreset = Partial<Listing> & {
   productUrl?: string;
   origin?: string;
+  request?: Pick<RequestDraft, "description" | "budget">;
 };
 const categoryImage: Record<string, string> = {
   repair: "repair",
@@ -248,6 +250,7 @@ export function CreateModal({
     },
   );
   const draft = drafts[kind] || {};
+  const requestPreset = kind === "request" ? preset?.request : undefined;
   const [selectedCategory, setSelectedCategory] = useState(
     drafts[initialKind]?.category ?? preset?.category ?? "repair",
   );
@@ -442,7 +445,7 @@ export function CreateModal({
             name="description"
             defaultValue={
               draft.description ??
-              (kind === "listing" ? preset?.description : undefined) ??
+              (kind === "listing" ? preset?.description : requestPreset?.description) ??
               ""
             }
             required
@@ -500,6 +503,7 @@ export function CreateModal({
               step="0.01"
               defaultValue={
                 draft[kind === "listing" ? "price" : "budget"] ??
+                requestPreset?.budget ??
                 preset?.price ??
                 ""
               }

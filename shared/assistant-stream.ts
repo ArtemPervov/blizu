@@ -27,6 +27,18 @@ export type ListingDraft = {
   unit: (typeof listingPriceUnits)[number];
 };
 
+export type RequestDraft = {
+  title: string;
+  description: string;
+  category: string;
+  city: string;
+  budget: number;
+};
+
+export type DraftAction =
+  | { kind: "listingDraft"; id: string; draft: ListingDraft }
+  | { kind: "requestDraft"; id: string; draft: RequestDraft };
+
 export type ChatAction =
   | {
       kind: "catalog";
@@ -39,7 +51,7 @@ export type ChatAction =
         price: number | null;
       }[];
     }
-  | { kind: "listingDraft"; id: string; draft: ListingDraft };
+  | DraftAction;
 
 export type ChatResult = { answer: string; action?: ChatAction };
 export type ChatEvent =

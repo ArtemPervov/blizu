@@ -357,6 +357,65 @@ test("assistant uses the public catalog and prepares a listing without publishin
   }
 });
 
+test("assistant request drafts open the customer request flow", async () => {
+  const draft = {
+    title: "Починить кран в ванной",
+    description: "Кран течёт после закрытия. Нужен мастер, который сможет приехать завтра.",
+    category: "repair",
+    city: "Будва",
+  };
+  let calls = 0;
+  const upstream = createServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk.toString();
+    const input = JSON.parse(body);
+    assert.deepEqual(
+      input.tools.map((tool: { function: { name: string } }) => tool.function.name),
+      ["prepare_request"],
+    );
+    const call = calls++ === 0
+      ? { name: "prepare_listing", arguments: { ...draft, price: 60, unit: "услуга" } }
+      : { name: "prepare_request", arguments: draft };
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ message: { tool_calls: [{ function: call }] } }));
+  });
+  upstream.listen(0, "127.0.0.1");
+  await once(upstream, "listening");
+  const address = upstream.address();
+  assert.ok(address && typeof address === "object");
+  const f = fixture(true, false, {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    model: "qwen3:8b",
+    timeoutMs: 5000,
+  });
+  try {
+    const customer = await login(f.app, "customer");
+    const message = "Создай заявку\nНужен ремонт крана в Будве.";
+    const unrelated = await customer.post("/api/assistant/chat").send({ message, language: "ru" }).expect(200);
+    assert.equal(unrelated.body.action, undefined);
+    const prepared = await customer.post("/api/assistant/chat").send({
+      message: "Можно завтра после обеда",
+      language: "ru",
+      history: [
+        { role: "user", content: message },
+        { role: "assistant", content: "Когда вам удобно?" },
+      ],
+    }).expect(200);
+    assert.equal(prepared.body.action.kind, "requestDraft");
+    assert.deepEqual(prepared.body.action.draft, { ...draft, budget: 0 });
+    assert.equal(f.store.get("SELECT id FROM requests WHERE title=?", draft.title), undefined);
+    const published = await customer.post("/api/requests").send({
+      ...prepared.body.action.draft, kind: "service",
+    }).expect(201);
+    assert.ok(f.store.get("SELECT id FROM requests WHERE id=?", published.body.id));
+    assert.equal(f.store.get("SELECT id FROM listings WHERE title=?", draft.title), undefined);
+  } finally {
+    f.cleanup();
+    upstream.closeAllConnections();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+  }
+});
+
 test("assistant keyword search finds word forms across cities and ranks title matches", async () => {
   const f = fixture(true, false, {
     baseUrl: "http://127.0.0.1:1",

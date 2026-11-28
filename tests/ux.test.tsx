@@ -235,55 +235,92 @@ test("the guest assistant streams a reply without leaving the current page", asy
   assert.ok(await screen.findByText("Откройте раздел «Мои заказы»."));
 });
 
-test("the assistant reveals a burst progressively with a stable waiting state", async () => {
-  Object.defineProperty(window, "matchMedia", {
-    value: (query: string) => ({ ...media(query), matches: false }),
-    configurable: true,
-  });
-  Object.defineProperty(document, "hidden", { value: false, configurable: true });
-  const answer = "Откройте страницу объявления, выберите способ связи с автором, указанный в карточке, и напишите, что именно вас интересует.";
-  const baseFetch = globalThis.fetch;
-  let source!: ReadableStreamDefaultController<Uint8Array>;
-  globalThis.fetch = async (input, init) => {
-    if (input === "/api/meta") {
-      const meta = await (await baseFetch(input, init)).json();
-      return Response.json({ ...meta, assistantEnabled: true });
-    }
-    if (input === "/api/assistant/chat") {
-      return new Response(new ReadableStream<Uint8Array>({
-        start(controller) {
-          source = controller;
-        },
-      }), { headers: { "Content-Type": "application/x-ndjson" } });
-    }
-    return baseFetch(input, init);
-  };
-  try {
-    mount();
-    fireEvent.click(await screen.findByRole("button", { name: "AI помощник" }));
-    fireEvent.click(screen.getByRole("button", { name: "Где посмотреть мои заказы?" }));
-    const dialog = screen.getByRole("dialog", { name: "AI помощник" });
-    assert.ok(within(dialog).getByRole("status"));
-    const frames: string[] = [];
-    const observer = new MutationObserver(() => {
-      const reply = dialog.querySelector(".assistant-answer:not(.assistant-waiting)")?.textContent;
-      if (reply) frames.push(reply);
+for (const kind of ["delta", "catalog"] as const) {
+  test(`the assistant types a ${kind} reply progressively`, async () => {
+    Object.defineProperty(window, "matchMedia", {
+      value: (query: string) => ({ ...media(query), matches: false }),
+      configurable: true,
     });
-    observer.observe(dialog, { childList: true, characterData: true, subtree: true });
+    Object.defineProperty(document, "hidden", { value: false, configurable: true });
+    const answer = kind === "catalog"
+      ? "Нашёл подходящие объявления в каталоге."
+      : "Откройте страницу объявления и выберите способ связи с автором.";
+    const baseFetch = globalThis.fetch;
+    let source!: ReadableStreamDefaultController<Uint8Array>;
+    globalThis.fetch = async (input, init) => {
+      if (input === "/api/meta") {
+        const meta = await (await baseFetch(input, init)).json();
+        return Response.json({ ...meta, assistantEnabled: true });
+      }
+      if (input === "/api/assistant/chat") {
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              source = controller;
+            },
+          }),
+          { headers: { "Content-Type": "application/x-ndjson" } },
+        );
+      }
+      return baseFetch(input, init);
+    };
     try {
-      const data = JSON.stringify({ delta: answer }) + '\n{"done":true}\n';
-      source.enqueue(new TextEncoder().encode(data));
-      source.close();
-      await within(dialog).findByText(answer);
-      assert.ok(frames.some((frame) => frame !== answer && answer.startsWith(frame)));
-      assert.equal(within(dialog).queryByRole("status"), null);
+      mount("/requests");
+      fireEvent.click(await screen.findByRole("button", { name: "AI помощник" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Где посмотреть мои заказы?" }),
+      );
+      const dialog = screen.getByRole("dialog", { name: "AI помощник" });
+      assert.ok(within(dialog).getByRole("status"));
+      const frames = new Set<string>();
+      const observer = new MutationObserver(() => {
+        const reply = dialog.querySelector(
+          ".assistant-answer:not(.assistant-waiting)",
+        )?.textContent;
+        if (reply) frames.add(reply);
+      });
+      observer.observe(dialog, { childList: true, characterData: true, subtree: true });
+      try {
+        const event = kind === "catalog"
+          ? {
+              result: {
+                answer,
+                action: {
+                  kind: "catalog",
+                  filters: { category: "repair" },
+                  total: 1,
+                  listings: [{ id: "l-repair", title: "Кондиционер", city: "Бар", price: 35 }],
+                },
+              },
+            }
+          : { delta: answer };
+        source.enqueue(
+          new TextEncoder().encode(JSON.stringify(event) + '\n{"done":true}\n'),
+        );
+        source.close();
+        const caret = await waitFor(() => {
+          const node = dialog.querySelector(".assistant-caret");
+          if (!node) throw new Error("Typing caret has not appeared");
+          return node;
+        });
+        assert.ok(caret.parentElement!.textContent!.length < answer.length);
+        const card = kind === "catalog"
+          ? within(dialog).getByRole("link", { name: /Кондиционер/ })
+          : null;
+        await within(dialog).findByText(answer);
+        assert.ok(frames.size >= 8);
+        assert.ok([...frames].every((frame) => answer.startsWith(frame)));
+        assert.equal(dialog.querySelector(".assistant-caret"), null);
+        assert.equal(within(dialog).queryByRole("status"), null);
+        if (card) assert.equal(within(dialog).getByRole("link", { name: /Кондиционер/ }), card);
+      } finally {
+        observer.disconnect();
+      }
     } finally {
-      observer.disconnect();
+      Reflect.deleteProperty(document, "hidden");
     }
-  } finally {
-    Reflect.deleteProperty(document, "hidden");
-  }
-});
+  });
+}
 
 test("guest assistant links to catalog matches and opens an explicit match", async () => {
   const filters = { category: "auto" };
@@ -370,6 +407,64 @@ test("assistant listing drafts prefill the regular publication form", async () =
   fireEvent.click(within(form).getByRole("button", { name: "Опубликовать предложение", exact: true }));
   await screen.findByRole("heading", { name: draft.title, level: 1 });
   assert.ok(fixture.store.get("SELECT id FROM listings WHERE title=?", draft.title));
+});
+
+test("a multiline chat request survives guest sign-in and publishes as a customer", async () => {
+  const message = "Создай заявку на ремонт крана.\nВ Будве, бюджет 45 евро.";
+  const draft = {
+    title: "Ремонт крана в Будве",
+    description: "Нужно устранить течь.\nМастер может приехать завтра после обеда.",
+    category: "repair",
+    city: "Будва",
+    budget: 45,
+  };
+  const baseFetch = globalThis.fetch;
+  let submitted = "";
+  globalThis.fetch = async (input, init) => {
+    if (input === "/api/meta") {
+      const meta = await (await baseFetch(input, init)).json();
+      return Response.json({ ...meta, assistantEnabled: true });
+    }
+    if (input === "/api/assistant/chat") {
+      submitted = JSON.parse(String(init?.body)).message;
+      const result = {
+        answer: "Подготовил черновик заявки.",
+        action: { kind: "requestDraft", id: "test-request", draft },
+      };
+      return new Response(JSON.stringify({ result }) + '\n{"done":true}\n', {
+        headers: { "Content-Type": "application/x-ndjson" },
+      });
+    }
+    return baseFetch(input, init);
+  };
+
+  mount("/requests");
+  fireEvent.click(await screen.findByRole("button", { name: "AI помощник" }));
+  const assistant = within(screen.getByRole("dialog", { name: "AI помощник" }));
+  const input = assistant.getByRole("textbox", { name: "Ваш вопрос" });
+  assert.equal(input.tagName, "TEXTAREA");
+  fireEvent.keyDown(input, { key: "Enter" });
+  assert.equal(submitted, "");
+  fireEvent.change(input, { target: { value: message } });
+  fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+  fireEvent.click(await assistant.findByRole("button", { name: "Проверить заявку" }));
+  assert.equal(submitted, message);
+  const auth = within(await screen.findByRole("dialog", { name: "С возвращением" }));
+  fireEvent.click(await auth.findByRole("button", { name: "Заказчик", exact: true }));
+  const form = await screen.findByRole("dialog", { name: "Что нужно сделать?" });
+  for (const [name, value] of Object.entries(draft)) {
+    const field = form.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+      `[name="${name}"]`,
+    );
+    assert.equal(field?.value, String(value));
+  }
+  assert.equal(fixture.store.get("SELECT id FROM requests WHERE title=?", draft.title), undefined);
+  fireEvent.click(within(form).getByRole("button", { name: "Создать заявку", exact: true }));
+  await screen.findByRole("heading", { name: draft.title, level: 1 });
+  assert.deepEqual(
+    { ...fixture.store.get("SELECT budget,customerId FROM requests WHERE title=?", draft.title) },
+    { budget: 45, customerId: "demo-customer" },
+  );
 });
 
 test("the hero keeps a decorative contour background with reduced motion and leaves its title and search usable", async () => {

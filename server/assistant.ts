@@ -10,6 +10,7 @@ import {
 import {
   assistantTools,
   catalogResult,
+  draftKindIn,
   runAssistantTool,
   type FindCatalogListings,
 } from "./assistant-actions.js";
@@ -76,7 +77,7 @@ const greetings = {
   me: "Zdravo! Kako mogu da vam pomognem u Blizu?",
 };
 
-const instructions = `You assist people on Blizu, a marketplace for goods and services in Montenegro. When asked to find or open listings, call search_catalog with the relevant filters. When asked to create or publish a listing, gather missing details and call prepare_listing. Do not announce results before using a tool. The user opens links or confirms publication in the interface. Keep guidance short and based on the facts below. Do not ask for passwords or verification codes.
+const instructions = `You assist people on Blizu, a marketplace for goods and services in Montenegro. When asked to find or open listings, call search_catalog. A request is for someone else to do work. For a request ('заявка'), collect the task and city and call prepare_request. A listing is what the user is offering or selling. For a listing ('объявление' or 'предложение'), collect the listing details and call prepare_listing. Do not announce results before using a tool. The user confirms publication in the interface. Keep guidance short and based on the facts below. Do not ask for passwords or verification codes.
 
 - "Services & goods" is the catalog. Use the search bar and filters for categories, cities and prices.
 - "Requests" contains tasks posted by people looking for help. An offer in the catalog describes what its author provides.
@@ -197,7 +198,8 @@ export function registerAssistant(
       return;
     }
     const filters = catalogFiltersIn(input.message);
-    if (isCatalogCommand(input.message)) {
+    const explicitDraft = draftKindIn(input.message);
+    if (!explicitDraft && isCatalogCommand(input.message)) {
       sendResult(
         res,
         streaming,
@@ -205,7 +207,7 @@ export function registerAssistant(
       );
       return;
     }
-    if (isBareCatalogQuery(input.message)) {
+    if (!explicitDraft && isBareCatalogQuery(input.message)) {
       const result = catalogResult(findListings, filters, input.language);
       if (result.action?.kind === "catalog" && result.action.total) {
         sendResult(res, streaming, result);
@@ -215,6 +217,14 @@ export function registerAssistant(
     if (running >= 2) {
       throw new HttpError(429, "Помощник занят. Попробуйте чуть позже.");
     }
+    const previousQuestion = input.history.at(-2)?.content;
+    const draftKind =
+      explicitDraft ?? (previousQuestion ? draftKindIn(previousQuestion) : undefined);
+    const tools = draftKind
+      ? assistantTools.filter(
+          ({ function: { name } }) => name === `prepare_${draftKind}`,
+        )
+      : assistantTools;
     const controller = new AbortController();
     const abort = () => controller.abort();
     const timeout = AbortSignal.timeout(config.timeoutMs);
@@ -237,7 +247,7 @@ export function registerAssistant(
             { role: "user", content: input.message },
           ],
           stream: streaming,
-          tools: assistantTools,
+          tools,
           think: false,
           keep_alive: config.keepWarm ? -1 : "15m",
           options: { num_ctx: contextSize, num_predict: 500 },
@@ -256,6 +266,7 @@ export function registerAssistant(
             findListings,
             input.language,
             filters,
+            draftKind,
           );
           if (result) {
             sendResult(res, streaming, result);
@@ -278,6 +289,7 @@ export function registerAssistant(
             findListings,
             input.language,
             filters,
+            draftKind,
           );
           if (result) {
             sendResult(res, streaming, result);
