@@ -22,6 +22,8 @@ import {
   CATEGORIES,
   CITIES,
   STATUS_LABELS,
+  isMarketplaceUser,
+  type AccountProfile,
   type User,
   type Listing,
   type Order,
@@ -41,6 +43,8 @@ import {
 } from "./moderation.js";
 import { registerOperatorRoutes } from "./operator.js";
 import { attachListingSources } from "./listing-sources.js";
+import { createListingPreviews } from "./listing-previews.js";
+import { registerConversationRoutes } from "./listing-conversations.js";
 import { registerAssistant, type AssistantConfig } from "./assistant.js";
 
 const scryptAsync = promisify(scrypt);
@@ -54,8 +58,55 @@ const category = z.enum(
   CATEGORIES.filter((c) => c.id !== "all").map((c) => c.id),
 );
 const city = z.enum(CITIES);
+const cityList = z
+  .string()
+  .max(240)
+  .transform((value) => [...new Set(value.split(",").filter(Boolean))])
+  .pipe(
+    z
+      .array(city)
+      .max(CITIES.length)
+      .refine((items) => !items.includes("Вся Черногория")),
+  )
+  .optional();
 const text = (min = 1, max = 3000) => z.string().trim().min(min).max(max);
 const money = z.number().finite().positive().max(1000000);
+const telegramUsername = z
+  .string()
+  .trim()
+  .max(64)
+  .regex(
+    /^(?:(?:@|(?:https?:\/\/)?t\.me\/)?[a-z][a-z0-9_]{3,31}\/?)?$/i,
+    "Укажите имя пользователя Telegram, например @username.",
+  )
+  .transform((value) =>
+    value.replace(/^(?:@|(?:https?:\/\/)?t\.me\/)|\/$/gi, ""),
+  );
+const viberNumber = z
+  .string()
+  .trim()
+  .max(32)
+  .transform((value) => value.replace(/[\s()-]/g, ""))
+  .pipe(
+    z
+      .string()
+      .regex(
+        /^(?:\+[1-9]\d{7,14})?$/,
+        "Укажите номер Viber с кодом страны, например +382…",
+      ),
+  );
+const accountProfile = z.strictObject({
+  name: text(2, 80),
+  city,
+  contact: text(0, 150),
+  bio: text(0, 500),
+  telegram: telegramUsername,
+  viber: viberNumber,
+  showListingContacts: z.boolean(),
+});
+type ProfileDetails = Pick<AccountProfile, "bio" | "telegram" | "viber"> & {
+  showListingContacts: number;
+};
 const link = z
   .string()
   .url()
@@ -117,6 +168,7 @@ export function createApp(options: AppOptions = {}) {
   }
   const uploadDir = resolve(dataDir, "uploads");
   mkdirSync(uploadDir, { recursive: true });
+  const listingPreview = createListingPreviews(uploadDir);
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", production ? 2 : 1);
@@ -193,6 +245,14 @@ export function createApp(options: AppOptions = {}) {
       req.user?.role === required
         ? next()
         : next(new HttpError(403, "Недостаточно прав для этого действия."));
+  const requireMarketplaceUser = (
+    req: AuthRequest,
+    _res: Response,
+    next: NextFunction,
+  ) =>
+    isMarketplaceUser(req.user?.role)
+      ? next()
+      : next(new HttpError(403, "Недостаточно прав для этого действия."));
   const authLimiter = rateLimit({
     windowMs: 15 * 60_000,
     limit: 30,
@@ -312,7 +372,7 @@ export function createApp(options: AppOptions = {}) {
           `SELECT COUNT(*) n FROM listings l JOIN users u ON u.id=l.providerId WHERE ${publicListings}`,
         )?.n,
         providers: store.get<{ n: number }>(
-          "SELECT COUNT(*) n FROM users WHERE role='provider' AND id NOT LIKE 'source-%' AND id NOT IN (SELECT userId FROM account_restrictions)",
+          "SELECT COUNT(*) n FROM users u WHERE (u.role='provider' OR EXISTS(SELECT 1 FROM listings l WHERE l.providerId=u.id)) AND u.id NOT LIKE 'source-%' AND u.id NOT IN (SELECT userId FROM account_restrictions)",
         )?.n,
         requests: store.get<{ n: number }>(
           `SELECT COUNT(*) n FROM requests WHERE status='open' AND customerId NOT IN (SELECT userId FROM account_restrictions)${deliveryEnabled ? "" : " AND kind='service'"}`,
@@ -323,6 +383,64 @@ export function createApp(options: AppOptions = {}) {
   app.get("/api/auth/me", (req: AuthRequest, res) =>
     res.json({ user: req.user ?? null }),
   );
+  const profileDetails = (userId: string) =>
+    store.get<ProfileDetails>(
+      "SELECT bio,telegram,viber,showListingContacts FROM user_profiles WHERE userId=?",
+      userId,
+    );
+  app.get("/api/profile", requireUser, (req: AuthRequest, res) => {
+    const { id, name, city, contact, role } = req.user!;
+    const details = profileDetails(id);
+    const profile: AccountProfile = {
+      name,
+      city,
+      contact,
+      bio: details?.bio ?? "",
+      telegram: details?.telegram ?? "",
+      viber: details?.viber ?? "",
+      showListingContacts:
+        isMarketplaceUser(role) && !!details?.showListingContacts,
+    };
+    res.json({ profile });
+  });
+  app.patch("/api/profile", requireUser, (req: AuthRequest, res) => {
+    const input = accountProfile.parse(req.body);
+    const user = req.user!;
+    const profile = {
+      ...input,
+      showListingContacts:
+        isMarketplaceUser(user.role) && input.showListingContacts,
+    };
+    store.transaction(() => {
+      store.run(
+        "UPDATE users SET name=?,city=?,contact=? WHERE id=?",
+        profile.name,
+        profile.city,
+        profile.contact,
+        user.id,
+      );
+      store.run(
+        `INSERT INTO user_profiles(userId,bio,telegram,viber,showListingContacts)
+        VALUES (?,?,?,?,?)
+        ON CONFLICT(userId) DO UPDATE SET bio=excluded.bio,telegram=excluded.telegram,
+          viber=excluded.viber,showListingContacts=excluded.showListingContacts`,
+        user.id,
+        profile.bio,
+        profile.telegram,
+        profile.viber,
+        Number(profile.showListingContacts),
+      );
+    });
+    res.json({
+      profile,
+      user: {
+        ...user,
+        name: profile.name,
+        city: profile.city,
+        contact: profile.contact,
+      },
+    });
+  });
   app.post("/api/auth/register", authLimiter, async (req, res) => {
     const input = z
       .object({
@@ -333,7 +451,7 @@ export function createApp(options: AppOptions = {}) {
           .transform((v) => v.toLowerCase()),
         password: z.string().min(10).max(128),
         city,
-        role: z.enum(["customer", "provider"]),
+        role: z.enum(["customer", "provider"]).default("customer"),
         contact: text(3, 150),
       })
       .parse(req.body);
@@ -396,6 +514,7 @@ export function createApp(options: AppOptions = {}) {
     });
     res.json({ ok: true });
   });
+  registerConversationRoutes(app, store, requireUser, publicListings);
 
   function findListings(query: unknown) {
     const input = z
@@ -405,6 +524,7 @@ export function createApp(options: AppOptions = {}) {
         source: z.enum(["telegram", "demo"]).optional(),
         category: z.string().max(40).optional(),
         city: z.string().max(80).optional(),
+        cities: cityList,
         sort: z
           .enum(["recommended", "newest", "price", "price_desc", "rating"])
           .default("recommended"),
@@ -444,7 +564,10 @@ export function createApp(options: AppOptions = {}) {
       where.push("l.category=?");
       params.push(input.category);
     }
-    if (input.city && input.city !== "Вся Черногория") {
+    if (input.cities?.length) {
+      where.push(`l.city IN (${input.cities.map(() => "?").join(",")})`);
+      params.push(...input.cities);
+    } else if (input.city && input.city !== "Вся Черногория") {
       where.push("l.city=?");
       params.push(input.city);
     }
@@ -532,18 +655,29 @@ export function createApp(options: AppOptions = {}) {
       !req.user?.isOperator
     )
       throw new HttpError(404, "Предложение не найдено.");
-    const publicContact =
+    const listingContact =
       !hidden && !ownerBlocked
         ? store.get<{ telegram: string; viber: string }>(
             "SELECT telegram,viber FROM listing_contacts WHERE listingId=?",
             String(item.id),
           )
         : undefined;
+    const providerProfile =
+      !hidden && !ownerBlocked
+        ? profileDetails(String(item.providerId))
+        : undefined;
+    const publicContact =
+      listingContact ??
+      (providerProfile?.showListingContacts &&
+      (providerProfile.telegram || providerProfile.viber)
+        ? { telegram: providerProfile.telegram, viber: providerProfile.viber }
+        : undefined);
     res.json({
       item: attachListingSources(store, [
         {
           ...item,
           ...(publicContact && { publicContact }),
+          ...(providerProfile?.bio && { providerBio: providerProfile.bio }),
           tags: JSON.parse(String(item.tags)),
           providerVerified: Boolean(item.providerVerified),
           ...(req.user?.id === item.providerId || req.user?.isOperator
@@ -557,7 +691,38 @@ export function createApp(options: AppOptions = {}) {
       ])[0],
     });
   });
-  app.get("/api/listing-images/:id/:file", (req: AuthRequest, res) => {
+  app.get("/api/providers/:id", (req, res) => {
+    const id = String(req.params.id);
+    const provider = store.get<{
+      id: string;
+      name: string;
+      city: string;
+      verified: number;
+      bio: string;
+    }>(
+      `SELECT u.id,u.name,u.city,u.verified,COALESCE(p.bio,'') bio FROM users u
+       LEFT JOIN user_profiles p ON p.userId=u.id
+       WHERE u.id=? AND u.role IN ('customer','provider') AND u.id NOT LIKE 'source-%'
+       AND EXISTS(SELECT 1 FROM listings l WHERE l.providerId=u.id AND ${publicListings})
+       AND NOT EXISTS(SELECT 1 FROM account_restrictions ar WHERE ar.userId=u.id)`,
+      id,
+    );
+    if (!provider) throw new HttpError(404, "Профиль не найден.");
+    const items = store
+      .all<
+        Record<string, unknown>
+      >(`${listingsSelect} WHERE l.providerId=? AND ${publicListings} ORDER BY l.createdAt DESC,l.id DESC LIMIT 100`, id)
+      .map((item) => ({
+        ...item,
+        tags: JSON.parse(String(item.tags)),
+        providerVerified: Boolean(item.providerVerified),
+      }));
+    res.json({
+      provider: { ...provider, verified: Boolean(provider.verified) },
+      items: attachListingSources(store, items),
+    });
+  });
+  app.get("/api/listing-images/:id/:file", async (req: AuthRequest, res) => {
     const id = String(req.params.id),
       file = String(req.params.file);
     if (!/^[a-f0-9]{64}\.(jpg|png|webp)$/.test(file))
@@ -580,12 +745,17 @@ export function createApp(options: AppOptions = {}) {
       )
     )
       throw new HttpError(404, "Фото не найдено.");
-    res.sendFile(resolve(uploadDir, "listings", file));
+    const preview =
+      req.query.variant === "card"
+        ? await listingPreview(file).catch(() => null)
+        : null;
+    if (preview && item.visible) res.set("Cache-Control", "private, no-cache");
+    res.sendFile(preview ?? resolve(uploadDir, "listings", file));
   });
   app.post(
     "/api/listings",
     requireUser,
-    role("provider"),
+    requireMarketplaceUser,
     (req: AuthRequest, res) => {
       const input = z
         .object({
@@ -595,28 +765,8 @@ export function createApp(options: AppOptions = {}) {
           city,
           price: money,
           unit: text(1, 40),
-          telegram: z
-            .string()
-            .trim()
-            .regex(
-              /^(?:@?[a-zA-Z][a-zA-Z0-9_]{3,31})?$/,
-              "Укажите имя пользователя Telegram, например @username.",
-            )
-            .default(""),
-          viber: z
-            .string()
-            .trim()
-            .max(32)
-            .transform((value) => value.replace(/[\s()-]/g, ""))
-            .pipe(
-              z
-                .string()
-                .regex(
-                  /^(?:\+[1-9]\d{7,14})?$/,
-                  "Укажите номер Viber с кодом страны, например +382… .",
-                ),
-            )
-            .default(""),
+          telegram: telegramUsername.default(""),
+          viber: viberNumber.default(""),
           image: z
             .enum([
               "repair",
@@ -650,7 +800,7 @@ export function createApp(options: AppOptions = {}) {
           store.run(
             "INSERT INTO listing_contacts (listingId,telegram,viber) VALUES (?,?,?)",
             id,
-            input.telegram.replace(/^@/, ""),
+            input.telegram,
             input.viber,
           );
         }
@@ -713,6 +863,8 @@ export function createApp(options: AppOptions = {}) {
     const input = z
       .object({
         city: z.string().max(80).optional(),
+        cities: cityList,
+        q: z.string().trim().max(200).optional(),
         category: z.string().max(40).optional(),
         kind: z.enum(["service", "delivery"]).optional(),
       })
@@ -723,7 +875,10 @@ export function createApp(options: AppOptions = {}) {
     ];
     if (!deliveryEnabled) where.push("r.kind='service'");
     const params: string[] = [];
-    if (input.city && input.city !== "Вся Черногория") {
+    if (input.cities?.length) {
+      where.push(`r.city IN (${input.cities.map(() => "?").join(",")})`);
+      params.push(...input.cities);
+    } else if (input.city && input.city !== "Вся Черногория") {
       where.push("r.city=?");
       params.push(input.city);
     }
@@ -734,6 +889,10 @@ export function createApp(options: AppOptions = {}) {
     if (input.kind) {
       where.push("r.kind=?");
       params.push(input.kind);
+    }
+    if (input.q) {
+      where.push("instr(casefold(r.title || ' ' || r.description),?)>0");
+      params.push(input.q.toLocaleLowerCase("ru"));
     }
     res.json({
       items: store.all(
@@ -786,8 +945,7 @@ export function createApp(options: AppOptions = {}) {
         now(),
       );
       const providers = store.all<{ id: string }>(
-        `SELECT DISTINCT u.id FROM users u JOIN listings l ON l.providerId=u.id WHERE u.role=? AND u.id NOT LIKE 'source-%' AND l.category=? AND (l.city=? OR ?=? OR ?=?) AND u.id<>? AND ${VISIBLE_LISTING_SQL}`,
-        "provider",
+        `SELECT DISTINCT u.id FROM users u JOIN listings l ON l.providerId=u.id WHERE u.role IN ('customer','provider') AND u.id NOT LIKE 'source-%' AND l.category=? AND (l.city=? OR ?=? OR ?=?) AND u.id<>? AND ${VISIBLE_LISTING_SQL}`,
         input.kind === "delivery" ? "delivery" : input.category,
         input.city,
         input.city,
@@ -826,7 +984,7 @@ export function createApp(options: AppOptions = {}) {
   app.post(
     "/api/requests/:id/offers",
     requireUser,
-    role("provider"),
+    requireMarketplaceUser,
     (req: AuthRequest, res) => {
       const input = z
         .object({ price: money, message: text(10, 2000), eta: text(3, 120) })
@@ -1196,6 +1354,10 @@ export function createApp(options: AppOptions = {}) {
   );
   app.post("/api/notifications/read", requireUser, (req: AuthRequest, res) => {
     store.run("UPDATE notifications SET read=1 WHERE userId=?", req.user!.id);
+    res.json({ ok: true });
+  });
+  app.delete("/api/notifications", requireUser, (req: AuthRequest, res) => {
+    store.run("DELETE FROM notifications WHERE userId=?", req.user!.id);
     res.json({ ok: true });
   });
   registerOperatorRoutes(app, store, requireUser);

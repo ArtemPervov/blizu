@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import sharp from "sharp";
 import request from "supertest";
 import { Store } from "./db.js";
 import { createApp } from "./app.js";
@@ -216,7 +217,16 @@ test("Telegram import is idempotent, images and source metadata survive API/favo
   const f = createApp({ store, demo: true, dataDir: dir });
   try {
     mkdirSync(join(dir, "photos"));
-    const photo = Buffer.from([0xff, 0xd8, 0xff, ...Array(50).fill(0)]);
+    const photo = await sharp({
+      create: {
+        width: 1280,
+        height: 960,
+        channels: 3,
+        background: "#ece1cf",
+      },
+    })
+      .jpeg()
+      .toBuffer();
     writeFileSync(join(dir, "photos", "a.jpg"), photo);
     const ads = selectTelegramAds(
       exported([
@@ -265,6 +275,20 @@ test("Telegram import is idempotent, images and source metadata survive API/favo
       (await request(f.app).get(item.image).expect(200)).body,
       photo,
     );
+    const previewPath = `${item.image}?variant=card`;
+    const preview = await request(f.app)
+      .get(previewPath)
+      .expect("Content-Type", /image\/webp/)
+      .expect("Cache-Control", "private, no-cache")
+      .expect(200);
+    const { width, height } = await sharp(preview.body).metadata();
+    assert.equal(width, 640);
+    assert.equal(height, 480);
+    assert.ok(preview.body.length < photo.length);
+    await request(f.app)
+      .get(previewPath)
+      .set("If-None-Match", preview.headers.etag)
+      .expect(304);
     const customer = request.agent(f.app);
     await customer
       .post("/api/auth/demo")
@@ -289,6 +313,10 @@ test("Telegram import is idempotent, images and source metadata survive API/favo
       })
       .expect(200);
     await request(f.app).get(item.image).expect(404);
+    await request(f.app)
+      .get(previewPath)
+      .set("If-None-Match", preview.headers.etag)
+      .expect(404);
     await request(f.app).get(`/api/listings/${item.id}`).expect(404);
     await op.get(item.image).expect(200);
     assert.equal(

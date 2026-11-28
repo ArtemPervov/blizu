@@ -1,3 +1,4 @@
+import { useUiText } from "../lib";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Check, ChevronDown, MapPin } from "lucide-react";
 import { CITIES } from "../../shared/types";
@@ -9,11 +10,14 @@ const cities = [allCities, ...CITIES.filter((city) => city !== allCities)];
 
 export function CityPicker({
   city,
+  summary,
   onChange,
 }: {
   city: string;
+  summary?: string;
   onChange: (city: string) => void;
 }) {
+  const tr = useUiText();
   const { language } = useI18n();
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -23,6 +27,7 @@ export function CityPicker({
   const [active, setActive] = useState(0);
   const current = Math.max(0, cities.indexOf(city));
   const label = (value: string) => cityName(value, language);
+  const triggerLabel = summary ?? label(cities[current]);
   const show = (index = current) => {
     setActive(index);
     setOpen(true);
@@ -62,7 +67,7 @@ export function CityPicker({
         ref={trigger}
         className="city-picker-trigger"
         type="button"
-        aria-label={`Ваш город: ${label(cities[current])}`}
+        aria-label={tr("Ваш город: {0}", triggerLabel)}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
@@ -75,7 +80,7 @@ export function CityPicker({
         }}
       >
         <MapPin size={15} aria-hidden="true" />
-        <span>{label(cities[current])}</span>
+        <span>{triggerLabel}</span>
         <ChevronDown size={13} aria-hidden="true" />
       </button>
       {open && (
@@ -84,7 +89,7 @@ export function CityPicker({
           id={id}
           className="city-picker-options"
           role="listbox"
-          aria-label="Города Черногории"
+          aria-label={tr("Города Черногории")}
           onKeyDown={(event) => {
             switch (event.key) {
               case "ArrowDown":

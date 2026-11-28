@@ -57,6 +57,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS favorites (userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, listingId TEXT NOT NULL REFERENCES listings(id) ON DELETE CASCADE, PRIMARY KEY(userId,listingId));
       CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, userId TEXT NOT NULL REFERENCES users(id), text TEXT NOT NULL, href TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS listings_filter ON listings(category,city);
+      CREATE INDEX IF NOT EXISTS listings_provider ON listings(providerId,createdAt);
       CREATE INDEX IF NOT EXISTS requests_filter ON requests(status,city);
       CREATE INDEX IF NOT EXISTS orders_parties ON orders(customerId,providerId);
       CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expiresAt);
@@ -91,7 +92,25 @@ export class Store {
         listingId TEXT PRIMARY KEY REFERENCES listings(id) ON DELETE CASCADE,
         telegram TEXT NOT NULL DEFAULT '', viber TEXT NOT NULL DEFAULT ''
       );
-      PRAGMA user_version=4;
+      CREATE TABLE IF NOT EXISTS user_profiles (
+        userId TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        bio TEXT NOT NULL DEFAULT '', telegram TEXT NOT NULL DEFAULT '',
+        viber TEXT NOT NULL DEFAULT '', showListingContacts INTEGER NOT NULL DEFAULT 0
+          CHECK(showListingContacts IN (0,1))
+      );
+      CREATE TABLE IF NOT EXISTS listing_conversations (
+        id TEXT PRIMARY KEY, listingId TEXT NOT NULL REFERENCES listings(id),
+        customerId TEXT NOT NULL REFERENCES users(id), providerId TEXT NOT NULL REFERENCES users(id),
+        updatedAt TEXT NOT NULL, UNIQUE(listingId, customerId), CHECK(customerId<>providerId)
+      );
+      CREATE INDEX IF NOT EXISTS listing_conversations_customer ON listing_conversations(customerId,updatedAt);
+      CREATE INDEX IF NOT EXISTS listing_conversations_provider ON listing_conversations(providerId,updatedAt);
+      CREATE TABLE IF NOT EXISTS listing_messages (
+        id TEXT PRIMARY KEY, conversationId TEXT NOT NULL REFERENCES listing_conversations(id) ON DELETE CASCADE,
+        authorId TEXT NOT NULL REFERENCES users(id), text TEXT NOT NULL, createdAt TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS listing_messages_thread ON listing_messages(conversationId,createdAt);
+      PRAGMA user_version=6;
     `),
     );
   }

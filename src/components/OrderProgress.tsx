@@ -1,3 +1,4 @@
+import { useUiText } from "../lib";
 import { Check, CircleAlert, ShieldCheck } from "lucide-react";
 import {
   STATUS_LABELS,
@@ -21,6 +22,7 @@ export function OrderProgress({
   order: Pick<Order, "kind" | "status">;
   compact?: boolean;
 }) {
+  const tr = useUiText();
   const { steps, index, exceptional, complete } = getOrderPosition(order);
   if (exceptional) {
     if (compact) return null;
@@ -34,17 +36,27 @@ export function OrderProgress({
           <ShieldCheck size={23} />
         )}
         <div>
-          <strong>{STATUS_LABELS[order.status]}</strong>
+          <strong>{tr(STATUS_LABELS[order.status])}</strong>
           <p>
             {order.status === "disputed"
-              ? "Дальнейшие действия — в разделе спора. История заказа и договорённостей сохранена."
-              : "Решение и договорённости сторон сохранены в истории заказа."}
+              ? tr(
+                  "Дальнейшие действия — в разделе спора. История заказа и договорённостей сохранена.",
+                )
+              : tr(
+                  "Решение и договорённости сторон сохранены в истории заказа.",
+                )}
           </p>
         </div>
       </div>
     );
   }
-  const label = `${order.kind === "delivery" ? "Доставка" : "Услуга"}: ${STATUS_LABELS[order.status]}. Этап ${index + 1} из ${steps.length}.`;
+  const label = tr(
+    "{0}: {1}. Этап {2} из {3}.",
+    tr(order.kind === "delivery" ? "Доставка" : "Услуга"),
+    tr(STATUS_LABELS[order.status]),
+    index + 1,
+    steps.length,
+  );
   if (compact)
     return (
       <div className="order-progress-mini" role="img" aria-label={label}>
@@ -67,7 +79,7 @@ export function OrderProgress({
     <ol
       className="order-stages"
       data-kind={order.kind}
-      aria-label="Этапы заказа"
+      aria-label={tr("Этапы заказа")}
     >
       {steps.map((step, i) => (
         <li
@@ -86,15 +98,15 @@ export function OrderProgress({
           </span>
           <span className="order-stage-label">
             {step === "completed" && order.kind === "delivery"
-              ? "Получено"
-              : shortLabels[step]}
+              ? tr("Получено")
+              : tr(shortLabels[step] ?? STATUS_LABELS[step])}
           </span>
           <span className="visually-hidden">
             {i < index || complete
-              ? " — пройден"
+              ? tr(" — пройден")
               : i === index
-                ? " — текущий этап"
-                : " — впереди"}
+                ? tr(" — текущий этап")
+                : tr(" — впереди")}
           </span>
         </li>
       ))}

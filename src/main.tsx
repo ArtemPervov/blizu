@@ -14,6 +14,8 @@ import "./telegram.css";
 import "./listing-cards.css";
 import "./listing-detail.css";
 import "./mobile.css";
+import "./profile.css";
+import "./interface.css";
 import "./assistant.css";
 import { MarketProvider } from "./market-state";
 const queryClient = new QueryClient({

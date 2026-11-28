@@ -481,13 +481,13 @@ test("schema upgrade preserves existing data and sessions; operator provisioning
     const session = (await customer.get("/api/auth/me").expect(200)).body.user
       .id;
     store.db.exec(
-      "DROP TABLE operator_audit; DROP TABLE reports; DROP TABLE listing_moderation; DROP TABLE account_restrictions; DROP TABLE operator_access; DELETE FROM users WHERE id='demo-operator'; PRAGMA user_version=1;",
+      "DROP TABLE user_profiles; DROP TABLE operator_audit; DROP TABLE reports; DROP TABLE listing_moderation; DROP TABLE account_restrictions; DROP TABLE operator_access; DELETE FROM users WHERE id='demo-operator'; PRAGMA user_version=1;",
     );
     store.close();
     store = new Store(path);
     assert.equal(
       store.get<{ user_version: number }>("PRAGMA user_version")!.user_version,
-      4,
+      6,
     );
     assert.ok(store.get("SELECT id FROM users WHERE id=?", session));
     assert.ok(store.get("SELECT token FROM sessions WHERE userId=?", session));

@@ -1,3 +1,4 @@
+import { useUiText } from "../lib";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, BadgeCheck, Columns3, Star, X } from "lucide-react";
@@ -8,18 +9,24 @@ import { useAvailableListings } from "../available-listings";
 import { listingPrice, listingAuthor, listingCity } from "../listing-format";
 
 export function CompareTray() {
+  const tr = useUiText();
   const { compared, toggleCompare, clearCompare } = useMarket();
   const [open, setOpen] = useState(false);
   const available = useAvailableListings(compared, open);
   if (!compared.length) return null;
   return (
     <>
-      <aside className="compare-tray" aria-label="Предложения для сравнения">
+      <aside
+        className="compare-tray"
+        aria-label={tr("Предложения для сравнения")}
+      >
         <div className="compare-preview">
           <Columns3 size={21} />
           <div>
-            <strong>Ваш короткий список</strong>
-            <span>{compared.length} из 3 предложений</span>
+            <strong>{tr("Ваш короткий список")}</strong>
+            <span>
+              {compared.length} {tr("из 3 предложений")}
+            </span>
           </div>
         </div>
         <div className="compare-thumbs">
@@ -27,7 +34,7 @@ export function CompareTray() {
             <button
               key={item.id}
               onClick={() => toggleCompare(item)}
-              aria-label={`Убрать из сравнения: ${item.title}`}
+              aria-label={tr("Убрать из сравнения: {0}", item.title)}
             >
               <img src={item.image} alt="" />
               <X size={11} />
@@ -39,23 +46,26 @@ export function CompareTray() {
           disabled={compared.length < 2}
           onClick={() => setOpen(true)}
         >
-          Сравнить
+          {tr("Сравнить")}
           <ArrowRight size={16} />
         </button>
         <button
           className="icon-button"
-          aria-label="Очистить сравнение"
+          aria-label={tr("Очистить сравнение")}
           onClick={clearCompare}
         >
           <X size={18} />
         </button>
       </aside>
       {open && (
-        <Modal title="Выбирайте с уверенностью" onClose={() => setOpen(false)}>
+        <Modal
+          title={tr("Выбирайте с уверенностью")}
+          onClose={() => setOpen(false)}
+        >
           <p className="muted">
-            Сравните условия и откройте предложение, которое подходит вашей
-            задаче. Цены «от» указаны за разные единицы — учитывайте их при
-            выборе.
+            {tr(
+              "Сравните условия и откройте предложение, которое подходит вашей задаче. Цены «от» указаны за разные единицы — учитывайте их при выборе.",
+            )}
           </p>
           {available.loading ? (
             <Loading />
@@ -63,18 +73,18 @@ export function CompareTray() {
             <ErrorState error={available.error} retry={available.refetch} />
           ) : !available.items.length ? (
             <Empty
-              title="Предложения больше недоступны"
-              description="Выберите другие варианты из каталога."
+              title={tr("Предложения больше недоступны")}
+              description={tr("Выберите другие варианты из каталога.")}
             />
           ) : (
             <div className="compare-table-wrap">
               <table className="compare-table">
                 <caption className="visually-hidden">
-                  Сравнение выбранных предложений
+                  {tr("Сравнение выбранных предложений")}
                 </caption>
                 <thead>
                   <tr>
-                    <th scope="col">Что важно</th>
+                    <th scope="col">{tr("Что важно")}</th>
                     {available.items.map((item) => (
                       <th key={item.id} scope="col">
                         <img src={item.image} alt="" />
@@ -85,7 +95,7 @@ export function CompareTray() {
                 </thead>
                 <tbody>
                   <tr>
-                    <th scope="row">Стоимость от</th>
+                    <th scope="row">{tr("Стоимость от")}</th>
                     {available.items.map((item) => (
                       <td key={item.id}>
                         <strong>{listingPrice(item)}</strong>
@@ -93,13 +103,13 @@ export function CompareTray() {
                     ))}
                   </tr>
                   <tr>
-                    <th scope="row">Город</th>
+                    <th scope="row">{tr("Город")}</th>
                     {available.items.map((item) => (
                       <td key={item.id}>{listingCity(item)}</td>
                     ))}
                   </tr>
                   <tr>
-                    <th scope="row">Категория</th>
+                    <th scope="row">{tr("Категория")}</th>
                     {available.items.map((item) => (
                       <td key={item.id}>
                         {CATEGORIES.find((c) => c.id === item.category)?.name}
@@ -107,38 +117,40 @@ export function CompareTray() {
                     ))}
                   </tr>
                   <tr>
-                    <th scope="row">Исполнитель</th>
+                    <th scope="row">{tr("Исполнитель")}</th>
                     {available.items.map((item) => (
                       <td key={item.id}>
                         {listingAuthor(item)}
-                        {item.source && <small>Автор в Telegram</small>}
+                        {item.source && <small>{tr("Автор в Telegram")}</small>}
                         {!item.source && item.providerVerified && (
                           <span className="compare-verified">
                             <BadgeCheck size={14} />
-                            Профиль отмечен
+                            {tr("Профиль отмечен")}
                           </span>
                         )}
                       </td>
                     ))}
                   </tr>
                   <tr>
-                    <th scope="row">Оценка</th>
+                    <th scope="row">{tr("Оценка")}</th>
                     {available.items.map((item) => (
                       <td key={item.id}>
                         {item.source ? (
-                          <small>Нет оценок на blizu</small>
+                          <small>{tr("Нет оценок на blizu")}</small>
                         ) : (
                           <>
                             <Star size={13} />
                             {item.providerRating.toFixed(1)}
-                            <small>{item.reviewCount} оценок</small>
+                            <small>
+                              {item.reviewCount} {tr("оценок")}
+                            </small>
                           </>
                         )}
                       </td>
                     ))}
                   </tr>
                   <tr>
-                    <th scope="row">Следующий шаг</th>
+                    <th scope="row">{tr("Следующий шаг")}</th>
                     {available.items.map((item) => (
                       <td key={item.id}>
                         <Link
@@ -146,7 +158,7 @@ export function CompareTray() {
                           to={`/listings/${item.id}`}
                           onClick={() => setOpen(false)}
                         >
-                          Подробнее
+                          {tr("Подробнее")}
                           <ArrowRight size={14} />
                         </Link>
                       </td>

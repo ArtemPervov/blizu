@@ -1,3 +1,4 @@
+import { useUiText } from "./lib";
 import { useEffect, useRef, useState } from "react";
 import {
   Link,
@@ -13,7 +14,6 @@ import {
   ArrowLeft,
   ArrowUpRight,
   Bell,
-  Globe2,
   Heart,
   House,
   Leaf,
@@ -27,6 +27,7 @@ import {
   Truck,
   UserRound,
   X,
+  Trash2,
 } from "lucide-react";
 import { CITIES, type Listing, type Notification } from "../shared/types";
 import { api, json, useAuth, useI18n, useToast } from "./lib";
@@ -45,7 +46,15 @@ import {
 } from "./forms";
 import { ListingPage, OrderPage, RequestPage, RequestsPage } from "./pages";
 import { DeliveryPage } from "./DeliveryPage";
-import { DashboardPage, OrdersPage } from "./WorkspacePages";
+import {
+  DashboardPage,
+  OrdersPage,
+  ProfilePage,
+  WorkspaceFrame,
+} from "./WorkspacePages";
+import { OrderHelpPage, PublicProviderPage } from "./PublicPages";
+import { ConversationsPage } from "./ConversationPages";
+import { LanguagePicker, ThemeToggle } from "./components/AppearanceControls";
 import { DiscoverPage } from "./DiscoverPage";
 import { CompareTray } from "./components/CompareTray";
 import { useMarket } from "./market-state";
@@ -54,13 +63,15 @@ import { OperatorPage } from "./OperatorPage";
 import { useAvailableListings } from "./available-listings";
 import { ReportModal, type ReportTarget } from "./components/ReportButton";
 import { CityPicker } from "./components/CityPicker";
-import { orderHelpPath } from "./market-copy";
+import { DesktopNavigation } from "./components/DesktopNavigation";
 import { AssistantWidget } from "./AssistantPage";
+import { catalogCities, orderHelpPath } from "./market-copy";
 export type CreateAction = (kind: CreateKind, preset?: CreatePreset) => void;
 
 export default function App() {
+  const tr = useUiText();
   const { user, logout } = useAuth();
-  const { t, language, setLanguage } = useI18n();
+  const { t } = useI18n();
   const toast = useToast();
   const qc = useQueryClient();
   const location = useLocation();
@@ -75,10 +86,15 @@ export default function App() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [city, setCityState] = useState("Вся Черногория");
+  const activeCatalogCities =
+    location.pathname === "/"
+      ? catalogCities(new URLSearchParams(location.search))
+      : [];
   const setCity = (value: string) => {
     setCityState(value);
     if (location.pathname === "/") {
       const search = new URLSearchParams(location.search);
+      search.delete("cities");
       search.set("city", value);
       search.delete("page");
       navigate(
@@ -89,7 +105,7 @@ export default function App() {
   };
   useEffect(() => {
     if (location.pathname !== "/") return;
-    const selected = new URLSearchParams(location.search).get("city");
+    const [selected] = catalogCities(new URLSearchParams(location.search));
     setCityState(
       selected && CITIES.some((item) => item === selected)
         ? selected
@@ -120,6 +136,21 @@ export default function App() {
     enabled: !!user,
     refetchInterval: 30000,
   });
+  const clearNotifications = useMutation({
+    mutationFn: () =>
+      api("/notifications", { method: "DELETE", body: json({}) }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["notifications", user?.id] });
+    },
+    onError: (error) => toast(error.message, "error"),
+  });
+  const authorize = (action: () => void) => {
+    if (user) action();
+    else {
+      intent.current = action;
+      setAuthOpen(true);
+    }
+  };
   const createAction: CreateAction = (kind, preset) => {
     if (kind === "delivery" && !deliveryEnabled) return;
     if (!user) {
@@ -154,53 +185,29 @@ export default function App() {
   return (
     <>
       <a className="skip-link" href="#main-content">
-        Перейти к содержимому
+        {tr("Перейти к содержимому")}
       </a>
       <header className="site-header">
         <div className="header-inner">
           <Brand />
-          <nav className="desktop-nav" aria-label="Основная навигация">
-            <NavLink to="/" end>
-              {t.services}
-            </NavLink>
-            <NavLink to="/requests">
-              {language === "ru" ? "Заявки" : t.requests}
-            </NavLink>
-            {deliveryEnabled ? (
-              <NavLink to="/delivery">{t.delivery}</NavLink>
-            ) : (
-              <Link to={orderHelpPath}>{t.orderHelp}</Link>
-            )}
-          </nav>
+          <DesktopNavigation deliveryEnabled={deliveryEnabled} />
           <div className="header-actions">
-            <CityPicker city={city} onChange={setCity} />
-            <label className="language-control">
-              <Globe2 size={15} />
-              <span className="mobile-language-label" aria-hidden="true">
-                <span className={language === "ru" ? "active" : undefined}>
-                  RU
-                </span>
-                <span>/</span>
-                <span className={language === "me" ? "active" : undefined}>
-                  ME
-                </span>
-                {language === "en" && <span className="active">EN</span>}
-              </span>
-              <select
-                aria-label="Язык интерфейса"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value as typeof language)}
-              >
-                <option value="ru">RU</option>
-                <option value="en">EN</option>
-                <option value="me">ME</option>
-              </select>
-            </label>
+            <CityPicker
+              city={city}
+              summary={
+                activeCatalogCities.length > 1
+                  ? `${tr("Выбрано")} ${activeCatalogCities.length}`
+                  : undefined
+              }
+              onChange={setCity}
+            />
+            <LanguagePicker />
+            <ThemeToggle />
             <div className="account-controls" ref={menuRef}>
               <Link
                 className="header-favorites icon-button"
                 to="/favorites"
-                aria-label="Избранное"
+                aria-label={tr("Избранное")}
               >
                 <Heart size={20} />
               </Link>
@@ -208,7 +215,7 @@ export default function App() {
                 <>
                   <button
                     className="icon-button notifications-button"
-                    aria-label="Уведомления"
+                    aria-label={tr("Уведомления")}
                     aria-expanded={notificationsOpen}
                     onClick={() => {
                       setNotificationsOpen((v) => !v);
@@ -231,7 +238,7 @@ export default function App() {
                   </button>
                   <button
                     className="avatar-button"
-                    aria-label="Меню аккаунта"
+                    aria-label={tr("Меню аккаунта")}
                     aria-expanded={userMenu}
                     onClick={() => {
                       setUserMenu((v) => !v);
@@ -245,26 +252,26 @@ export default function App() {
                       <strong>{user.name}</strong>
                       <small>
                         {user.isOperator
-                          ? "Оператор"
+                          ? tr("Оператор")
                           : user.role === "arbiter"
-                            ? "Арбитр"
+                            ? tr("Арбитр")
                             : user.role === "provider"
-                              ? "Исполнитель"
-                              : "Заказчик"}
+                              ? tr("Исполнитель")
+                              : tr("Заказчик")}
                       </small>
                       <Link to="/dashboard">
                         <UserRound size={16} />
-                        Личный кабинет
+                        {tr("Личный кабинет")}
                       </Link>
                       {user.isOperator && (
                         <Link to="/operator">
                           <ShieldCheck size={16} />
-                          Панель оператора
+                          {tr("Панель оператора")}
                         </Link>
                       )}
                       <Link to="/orders">
                         <Package size={16} />
-                        Мои заказы
+                        {tr("Мои заказы")}
                       </Link>
                       <Link to="/favorites">
                         <Heart size={16} />
@@ -275,11 +282,11 @@ export default function App() {
                           await logout();
                           setUserMenu(false);
                           navigate("/");
-                          toast("Вы вышли из аккаунта");
+                          toast(tr("Вы вышли из аккаунта"));
                         }}
                       >
                         <LogOut size={16} />
-                        Выйти
+                        {tr("Выйти")}
                       </button>
                     </div>
                   )}
@@ -287,21 +294,33 @@ export default function App() {
                     <div className="dropdown notifications-dropdown">
                       <strong>
                         <BrandSpark />
-                        Уведомления
+                        {tr("Уведомления")}
                       </strong>
+                      {!!notifications?.items.length && (
+                        <button
+                          type="button"
+                          className="notification-clear"
+                          disabled={clearNotifications.isPending}
+                          onClick={() => clearNotifications.mutate()}
+                        >
+                          <Trash2 size={15} /> {tr("Очистить уведомления")}
+                        </button>
+                      )}
                       {notifications?.items.length ? (
                         notifications.items.map((n) => (
                           <Link key={n.id} to={n.href}>
                             <span className="notification-symbol">
                               <Bell size={15} />
                             </span>
-                            <span>{n.text}</span>
+                            <span>{tr(n.text)}</span>
                             <ArrowUpRight size={14} />
                           </Link>
                         ))
                       ) : (
                         <p className="muted">
-                          Здесь появятся отклики и новости ваших заказов.
+                          {tr(
+                            "Здесь появятся отклики и новости ваших заказов.",
+                          )}
                         </p>
                       )}
                     </div>
@@ -324,11 +343,13 @@ export default function App() {
               }
             >
               <Plus size={18} />
-              {user?.role === "provider" ? "Добавить услугу" : "Создать заявку"}
+              {user?.role === "provider"
+                ? tr("Добавить услугу")
+                : tr("Создать заявку")}
             </button>
             <button
               className="icon-button mobile-toggle"
-              aria-label={mobileOpen ? "Закрыть меню" : "Открыть меню"}
+              aria-label={mobileOpen ? tr("Закрыть меню") : tr("Открыть меню")}
               aria-expanded={mobileOpen}
               aria-controls={mobileOpen ? "mobile-menu" : undefined}
               onClick={() => setMobileOpen((v) => !v)}
@@ -353,12 +374,12 @@ export default function App() {
             {deliveryEnabled ? (
               <NavLink to="/delivery">{t.delivery}</NavLink>
             ) : (
-              <Link to={orderHelpPath}>{t.orderHelp}</Link>
+              <NavLink to={orderHelpPath}>{t.orderHelp}</NavLink>
             )}
             <NavLink to="/dashboard">{t.orders}</NavLink>
             <NavLink to="/orders">{t.myOrders}</NavLink>
             {user?.isOperator && (
-              <NavLink to="/operator">Панель оператора</NavLink>
+              <NavLink to="/operator">{tr("Панель оператора")}</NavLink>
             )}
             <button
               onClick={() =>
@@ -374,14 +395,7 @@ export default function App() {
         <Routes>
           <Route
             path="/"
-            element={
-              <DiscoverPage
-                city={city}
-                setCity={setCity}
-                create={createAction}
-                meta={meta}
-              />
-            }
+            element={<DiscoverPage create={createAction} meta={meta} />}
           />
           <Route
             path="/requests"
@@ -411,9 +425,14 @@ export default function App() {
             }
           />
           <Route
+            path={orderHelpPath}
+            element={<OrderHelpPage create={createAction} />}
+          />
+          <Route path="/providers/:id" element={<PublicProviderPage />} />
+          <Route
             path="/listings/:id"
             element={
-              <ListingPage create={createAction} report={reportAction} />
+              <ListingPage authorize={authorize} report={reportAction} />
             }
           />
           <Route
@@ -424,6 +443,16 @@ export default function App() {
                 deliveryEnabled={deliveryEnabled}
                 requireLogin={() => setAuthOpen(true)}
               />
+            }
+          />
+          <Route
+            path="/dashboard/profile"
+            element={<ProfilePage requireLogin={() => setAuthOpen(true)} />}
+          />
+          <Route
+            path="/dashboard/messages/:id?"
+            element={
+              <ConversationsPage requireLogin={() => setAuthOpen(true)} />
             }
           />
           <Route
@@ -450,9 +479,7 @@ export default function App() {
           {meta?.assistantEnabled && (
             <Route
               path="/assistant"
-              element={
-                <Navigate to="/" replace state={{ openAssistant: true }} />
-              }
+              element={<Navigate to="/" replace state={{ openAssistant: true }} />}
             />
           )}
           <Route
@@ -460,11 +487,13 @@ export default function App() {
             element={
               <div className="page-shell">
                 <Empty
-                  title="Такой страницы нет"
-                  description="Но рядом наверняка найдётся что-то полезное."
+                  title={tr("Такой страницы нет")}
+                  description={tr(
+                    "Но рядом наверняка найдётся что-то полезное.",
+                  )}
                 >
                   <Link className="button primary" to="/">
-                    На главную
+                    {tr("На главную")}
                   </Link>
                 </Empty>
               </div>
@@ -487,10 +516,10 @@ export default function App() {
             <span>{t.delivery}</span>
           </NavLink>
         ) : (
-          <Link to={orderHelpPath}>
+          <NavLink to={orderHelpPath}>
             <ShoppingBag size={20} />
             <span>{t.orderHelpShort}</span>
-          </Link>
+          </NavLink>
         )}
         <NavLink to="/favorites">
           <Heart size={20} />
@@ -520,28 +549,28 @@ export default function App() {
           <div>
             <Brand />
             <p>
-              Ближе к людям.
+              {tr("Ближе к людям.")}
               <br />
-              Ближе к дому.
+              {tr("Ближе к дому.")}
             </p>
           </div>
           <div className="footer-links">
-            <Link to="/">Услуги и товары</Link>
-            <Link to="/requests">Найти исполнителя</Link>
+            <Link to="/">{tr("Услуги и товары")}</Link>
+            <Link to="/requests">{tr("Найти исполнителя")}</Link>
             <Link to={deliveryEnabled ? "/delivery" : orderHelpPath}>
-              {deliveryEnabled ? "Заказать доставку" : t.orderHelp}
+              {deliveryEnabled ? tr("Заказать доставку") : t.orderHelp}
             </Link>
-            <Link to="/dashboard">Личный кабинет</Link>
+            <Link to="/dashboard">{tr("Личный кабинет")}</Link>
           </div>
           <div className="footer-note">
             <span>
               <Leaf size={16} />
-              Сделано для жизни в Черногории
+              {tr("Сделано для жизни в Черногории")}
             </span>
             <small>
-              Договаривайтесь, помогайте друг другу,
+              {tr("Договаривайтесь, помогайте друг другу,")}
               <br />
-              чувствуйте себя дома.
+              {tr("чувствуйте себя дома.")}
             </small>
           </div>
         </div>
@@ -549,13 +578,13 @@ export default function App() {
           <span>
             © {new Date().getFullYear()} blizu ·{" "}
             <a href="/credits.html" target="_blank" rel="noreferrer">
-              Фотографии
+              {tr("Фотографии")}
             </a>
           </span>
           <span>
             {meta?.demo
-              ? "Карточки с пометкой «Демо» содержат вымышленные данные"
-              : "Оплата напрямую между сторонами"}
+              ? tr("Карточки с пометкой «Демо» содержат вымышленные данные")
+              : tr("Оплата напрямую между сторонами")}
           </span>
           <span className="footer-coordinates">42°25′ N &nbsp; 18°46′ E</span>
         </div>
@@ -590,6 +619,7 @@ export default function App() {
 }
 
 function Favorites({ requireLogin }: { requireLogin: () => void }) {
+  const tr = useUiText();
   const { user, loading } = useAuth();
   const market = useMarket();
   const qc = useQueryClient();
@@ -607,7 +637,7 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
     onSuccess: () => {
       market.clearSaved();
       qc.invalidateQueries({ queryKey: ["favorites"] });
-      toast("Избранное перенесено в аккаунт");
+      toast(tr("Избранное перенесено в аккаунт"));
     },
     onError: (error) => toast(error.message, "error"),
   });
@@ -619,15 +649,16 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
   });
   const guestSaved = useAvailableListings(market.saved);
   const items = user ? ids.data?.items : guestSaved.items;
-  return (
-    <div className="page-shell">
+  const content = (
+    <>
       {user && (
         <Link className="back-link favorites-back" to="/dashboard">
-          <ArrowLeft size={16} aria-hidden="true" />В личный кабинет
+          <ArrowLeft size={16} aria-hidden="true" />
+          {tr("В личный кабинет")}
         </Link>
       )}
       <div className="page-heading">
-        <span className="section-kicker">ТО, ЧТО ПОНРАВИЛОСЬ</span>
+        <span className="section-kicker">{tr("ТО, ЧТО ПОНРАВИЛОСЬ")}</span>
         <h1>
           {t.favorites}
           <span className="heading-dot">.</span>
@@ -637,15 +668,16 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
         <div className="guest-saved-note">
           <Heart size={18} />
           <p>
-            На этом устройстве есть сохранённые предложения. Перенести их в ваш
-            аккаунт?
+            {tr(
+              "На этом устройстве есть сохранённые предложения. Перенести их в ваш аккаунт?",
+            )}
           </p>
           <button
             className="button primary"
             disabled={transfer.isPending}
             onClick={() => transfer.mutate()}
           >
-            {transfer.isPending ? "Переносим…" : "Перенести избранное"}
+            {transfer.isPending ? tr("Переносим…") : tr("Перенести избранное")}
           </button>
         </div>
       )}
@@ -653,11 +685,12 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
         <div className="guest-saved-note">
           <Heart size={18} />
           <p>
-            Избранное сохранено на этом устройстве. Предложения доступны и без
-            регистрации.
+            {tr(
+              "Избранное сохранено на этом устройстве. Предложения доступны и без регистрации.",
+            )}
           </p>
           <button className="button secondary" onClick={requireLogin}>
-            Войти
+            {tr("Войти")}
           </button>
         </div>
       )}
@@ -667,12 +700,14 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
         <ErrorState error={guestSaved.error} retry={guestSaved.refetch} />
       ) : !user && !items?.length ? (
         <Empty
-          title="Сохраните полезные контакты"
+          title={tr("Сохраните полезные контакты")}
           illustration="favorites"
-          description="Нажимайте сердечко на карточках. Ваши находки останутся на этом устройстве."
+          description={tr(
+            "Нажимайте сердечко на карточках. Ваши находки останутся на этом устройстве.",
+          )}
         >
           <button className="button primary" onClick={requireLogin}>
-            Войти в аккаунт
+            {tr("Войти в аккаунт")}
           </button>
         </Empty>
       ) : user && ids.isPending ? (
@@ -687,15 +722,22 @@ function Favorites({ requireLogin }: { requireLogin: () => void }) {
         </div>
       ) : (
         <Empty
-          title="Соберите своё избранное"
+          title={tr("Соберите своё избранное")}
           illustration="favorites"
-          description="Нажимайте на сердечко у предложений, которые хотите сохранить."
+          description={tr(
+            "Нажимайте на сердечко у предложений, которые хотите сохранить.",
+          )}
         >
           <Link className="button primary" to="/">
-            Найти что-нибудь полезное
+            {tr("Найти что-нибудь полезное")}
           </Link>
         </Empty>
       )}
-    </div>
+    </>
+  );
+  return user ? (
+    <WorkspaceFrame user={user}>{content}</WorkspaceFrame>
+  ) : (
+    <div className="page-shell">{content}</div>
   );
 }

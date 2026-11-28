@@ -1,3 +1,4 @@
+import { useUiText } from "../lib";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Flag, Send } from "lucide-react";
@@ -25,6 +26,7 @@ export function ReportButton({
   ownerId: string;
   onReport: (target: ReportTarget) => void;
 }) {
+  const tr = useUiText();
   const { user } = useAuth();
   if (user?.id === ownerId || user?.isOperator) return null;
   return (
@@ -35,8 +37,8 @@ export function ReportButton({
       >
         <Flag size={14} />
         {targetType === "listing"
-          ? "Пожаловаться на предложение"
-          : "Пожаловаться на исполнителя"}
+          ? tr("Пожаловаться на предложение")
+          : tr("Пожаловаться на исполнителя")}
       </button>
     </>
   );
@@ -52,6 +54,7 @@ export function ReportModal({
   targetLabel: string;
   onClose: () => void;
 }) {
+  const tr = useUiText();
   const toast = useToast();
   const [category, setCategory] = useState<ReportCategory>("other");
   const [description, setDescription] = useState("");
@@ -64,23 +67,23 @@ export function ReportModal({
     onSuccess: () => {
       onClose();
       toast(
-        "Обращение отправлено. Ответ придёт в уведомления сервиса.",
+        tr("Обращение отправлено. Ответ придёт в уведомления сервиса."),
         "success",
       );
     },
   });
   return (
     <Modal
-      title="Сообщить о проблеме"
+      title={tr("Сообщить о проблеме")}
       onClose={() => {
         if (!mutation.isPending) onClose();
       }}
     >
       <p className="operator-modal-target">{targetLabel}</p>
       <p className="modal-description">
-        Обращение увидит команда сервиса. Если проблема касается уже
-        оформленного заказа, откройте спор внутри него — так арбитру будет
-        доступна история.
+        {tr(
+          "Обращение увидит команда сервиса. Если проблема касается уже оформленного заказа, откройте спор внутри него — так арбитру будет доступна история.",
+        )}
       </p>
       <form
         className="form-stack"
@@ -89,24 +92,26 @@ export function ReportModal({
           mutation.mutate();
         }}
       >
-        <Field label="Причина обращения">
+        <Field label={tr("Причина обращения")}>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as ReportCategory)}
           >
             {Object.entries(REPORT_CATEGORIES).map(([key, label]) => (
               <option key={key} value={key}>
-                {label}
+                {tr(label)}
               </option>
             ))}
           </select>
         </Field>
         <Field
-          label="Что произошло?"
-          hint="Не менее 10 символов. Опишите факты, которые помогут разобраться."
+          label={tr("Что произошло?")}
+          hint={tr(
+            "Не менее 10 символов. Опишите факты, которые помогут разобраться.",
+          )}
         >
           <textarea
-            aria-label="Что произошло?"
+            aria-label={tr("Что произошло?")}
             required
             minLength={10}
             maxLength={2000}
@@ -118,7 +123,7 @@ export function ReportModal({
         </Field>
         <FormError message={mutation.error?.message} />
         <button className="button primary full" disabled={mutation.isPending}>
-          {mutation.isPending ? "Отправляем…" : "Отправить обращение"}
+          {mutation.isPending ? tr("Отправляем…") : tr("Отправить обращение")}
           <Send size={16} />
         </button>
       </form>

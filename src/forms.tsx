@@ -1,9 +1,11 @@
+import { useUiText } from "./lib";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   Check,
+  ChevronDown,
   BriefcaseBusiness,
   Link2,
   Package,
@@ -12,9 +14,15 @@ import {
   UserRound,
   Wrench,
 } from "lucide-react";
-import { CATEGORIES, CITIES, type Listing } from "../shared/types";
-import { api, json, useAuth, useToast } from "./lib";
+import {
+  CATEGORIES,
+  CITIES,
+  isMarketplaceUser,
+  type Listing,
+} from "../shared/types";
+import { api, json, useAuth, useI18n, useToast } from "./lib";
 import { Field, FormError, Modal } from "./components/ui";
+import { categoryName, cityName } from "./market-copy";
 import type { RequestDraft } from "../shared/assistant-stream";
 
 export type CreateKind = "request" | "delivery" | "listing";
@@ -42,6 +50,8 @@ export function AuthModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const tr = useUiText();
+  const { language } = useI18n();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -73,13 +83,13 @@ export function AuthModal({
   }
   return (
     <Modal
-      title={mode === "login" ? "С возвращением" : "Будем ближе"}
+      title={mode === "login" ? tr("С возвращением") : tr("Будем ближе")}
       onClose={onClose}
     >
       <p className="modal-description">
         {mode === "login"
-          ? "Ваши заказы, любимые мастера и полезные находки — здесь."
-          : "Присоединяйтесь к своим людям в Черногории."}
+          ? tr("Ваши заказы, любимые мастера и полезные находки — здесь.")
+          : tr("Присоединяйтесь к своим людям в Черногории.")}
       </p>
       <div className="segmented">
         <button
@@ -90,7 +100,7 @@ export function AuthModal({
             setError("");
           }}
         >
-          Войти
+          {tr("Войти")}
         </button>
         <button
           className={mode === "register" ? "active" : ""}
@@ -100,47 +110,45 @@ export function AuthModal({
             setError("");
           }}
         >
-          Создать аккаунт
+          {tr("Создать аккаунт")}
         </button>
       </div>
       <form className="form-stack" onSubmit={submit}>
         {mode === "register" && (
           <>
-            <Field label="Как к вам обращаться">
+            <Field label={tr("Как к вам обращаться")}>
               <input
                 name="name"
                 required
                 minLength={2}
                 maxLength={80}
                 autoComplete="name"
-                placeholder="Ваше имя"
+                placeholder={tr("Ваше имя")}
               />
             </Field>
             <div className="form-row">
-              <Field label="Ваш город">
+              <Field label={tr("Ваш город")}>
                 <select name="city" defaultValue="Будва">
                   {CITIES.map((c) => (
-                    <option key={c}>{c}</option>
+                    <option key={c} value={c}>
+                      {cityName(c, language)}
+                    </option>
                   ))}
-                </select>
-              </Field>
-              <Field label="Я здесь, чтобы…">
-                <select name="role">
-                  <option value="customer">Находить и заказывать</option>
-                  <option value="provider">Предлагать услуги и товары</option>
                 </select>
               </Field>
             </div>
             <Field
-              label="Контакт для связи"
-              hint="Будет доступен только второй стороне после согласования заказа."
+              label={tr("Контакт для связи")}
+              hint={tr(
+                "Будет доступен только второй стороне после согласования заказа.",
+              )}
             >
               <input
                 name="contact"
                 required
                 minLength={3}
                 maxLength={150}
-                placeholder="Телефон или @telegram"
+                placeholder={tr("Телефон или @telegram")}
                 autoComplete="tel"
               />
             </Field>
@@ -157,8 +165,8 @@ export function AuthModal({
           />
         </Field>
         <Field
-          label="Пароль"
-          hint={mode === "register" ? "Не меньше 10 символов." : undefined}
+          label={tr("Пароль")}
+          hint={mode === "register" ? tr("Не меньше 10 символов.") : undefined}
         >
           <input
             name="password"
@@ -169,28 +177,28 @@ export function AuthModal({
             autoComplete={
               mode === "register" ? "new-password" : "current-password"
             }
-            placeholder="Ваш пароль"
+            placeholder={tr("Ваш пароль")}
           />
         </Field>
         <FormError message={error} />
         <button className="button primary full" disabled={pending}>
           {pending
-            ? "Подождите…"
+            ? tr("Подождите…")
             : mode === "login"
-              ? "Войти в аккаунт"
-              : "Создать аккаунт"}
+              ? tr("Войти в аккаунт")
+              : tr("Создать аккаунт")}
           <ArrowRight size={17} />
         </button>
       </form>
       {demo && (
         <div className="demo-login">
-          <span>ПОЗНАКОМИТЬСЯ БЕЗ РЕГИСТРАЦИИ</span>
+          <span>{tr("ПОЗНАКОМИТЬСЯ БЕЗ РЕГИСТРАЦИИ")}</span>
           <div>
             {[
-              ["customer", "Заказчик", UserRound],
-              ["provider", "Мастер", Wrench],
-              ["arbiter", "Арбитр", ShieldCheck],
-              ["operator", "Оператор", BriefcaseBusiness],
+              ["customer", tr("Заказчик"), UserRound],
+              ["provider", tr("Мастер"), Wrench],
+              ["arbiter", tr("Арбитр"), ShieldCheck],
+              ["operator", tr("Оператор"), BriefcaseBusiness],
             ].map(([role, name, Icon]) => {
               const I = Icon as typeof UserRound;
               return (
@@ -216,7 +224,7 @@ export function AuthModal({
               );
             })}
           </div>
-          <small>Демонстрационные аккаунты и вымышленные данные.</small>
+          <small>{tr("Демонстрационные аккаунты и вымышленные данные.")}</small>
         </div>
       )}
     </Modal>
@@ -234,6 +242,8 @@ export function CreateModal({
   onClose: () => void;
   deliveryEnabled: boolean;
 }) {
+  const tr = useUiText();
+  const { language } = useI18n();
   const { user } = useAuth();
   const [kind, setKind] = useState(initialKind);
   const draftKey = `blizu.draft.${user?.id}.${preset?.id ?? preset?.productUrl ?? "new"}`;
@@ -293,8 +303,8 @@ export function CreateModal({
       );
       toast(
         kind === "listing"
-          ? "Предложение опубликовано"
-          : "Заявка создана. Ждём первые отклики!",
+          ? tr("Предложение опубликовано")
+          : tr("Заявка создана. Ждём первые отклики!"),
       );
     },
   });
@@ -306,17 +316,20 @@ export function CreateModal({
     <Modal
       title={
         kind === "delivery"
-          ? "Доставим то, чего не хватает"
+          ? tr("Доставим то, чего не хватает")
           : kind === "listing"
-            ? "Ваше предложение"
-            : "Что нужно сделать?"
+            ? tr("Ваше предложение")
+            : tr("Что нужно сделать?")
       }
       onClose={onClose}
+      className="publication-modal"
     >
       <p className="modal-description">
         {kind === "delivery"
-          ? "Добавьте ссылку — логисты рассчитают итоговую стоимость и сроки."
-          : "Расскажите чуть подробнее, чтобы быстрее найти своих людей."}
+          ? tr(
+              "Добавьте ссылку — логисты рассчитают итоговую стоимость и сроки.",
+            )
+          : tr("Расскажите чуть подробнее, чтобы быстрее найти своих людей.")}
       </p>
       <div className="create-tabs">
         <button
@@ -332,7 +345,7 @@ export function CreateModal({
           }}
         >
           <Wrench size={16} />
-          Заявка
+          {tr("Заявка")}
         </button>
         {deliveryEnabled && (
           <button
@@ -345,10 +358,10 @@ export function CreateModal({
             }}
           >
             <Package size={16} />
-            Доставка
+            {tr("Доставка")}
           </button>
         )}
-        {user?.role === "provider" && (
+        {isMarketplaceUser(user?.role) && (
           <button
             disabled={mutation.isPending}
             className={kind === "listing" ? "active" : ""}
@@ -362,7 +375,7 @@ export function CreateModal({
             }}
           >
             <BriefcaseBusiness size={16} />
-            Предложение
+            {tr("Предложение")}
           </button>
         )}
       </div>
@@ -384,12 +397,14 @@ export function CreateModal({
         {drafts[kind] && (
           <p className="draft-note">
             <Check size={15} />
-            Черновик сохранён в этой вкладке
+            {tr("Черновик сохранён в этой вкладке")}
           </p>
         )}
         <Field
           label={
-            kind === "listing" ? "Название предложения" : "Коротко о задаче"
+            kind === "listing"
+              ? tr("Название предложения")
+              : tr("Коротко о задаче")
           }
         >
           <input
@@ -400,14 +415,14 @@ export function CreateModal({
             defaultValue={draft.title ?? preset?.title ?? ""}
             placeholder={
               kind === "delivery"
-                ? "Например, доставить кофемашину из Европы"
-                : "Например, починить кондиционер в Шушани"
+                ? tr("Например, доставить кофемашину из Европы")
+                : tr("Например, починить кондиционер в Шушани")
             }
           />
         </Field>
         {kind === "delivery" && (
           <>
-            <Field label="Ссылка на товар">
+            <Field label={tr("Ссылка на товар")}>
               <div className="input-with-icon">
                 <Link2 size={17} />
                 <input
@@ -421,15 +436,18 @@ export function CreateModal({
                 />
               </div>
             </Field>
-            <Field label="Откуда доставить">
+            <Field label={tr("Откуда доставить")}>
               <select
                 name="origin"
                 defaultValue={draft.origin ?? preset?.origin ?? "Россия"}
               >
-                <option>Россия</option>
-                <option>Китай</option>
-                <option>Европа</option>
-                <option>Другая страна</option>
+                {["Россия", "Китай", "Европа", "Другая страна"].map(
+                  (origin) => (
+                    <option key={origin} value={origin}>
+                      {tr(origin)}
+                    </option>
+                  ),
+                )}
               </select>
             </Field>
           </>
@@ -437,8 +455,8 @@ export function CreateModal({
         <Field
           label={
             kind === "listing"
-              ? "Расскажите о своём предложении"
-              : "Подробности"
+              ? tr("Расскажите о своём предложении")
+              : tr("Подробности")
           }
         >
           <textarea
@@ -454,14 +472,14 @@ export function CreateModal({
             rows={4}
             placeholder={
               kind === "delivery"
-                ? "Что за товар, вес и размеры, удобный способ получения…"
-                : "Что нужно сделать, когда удобно, что важно учесть…"
+                ? tr("Что за товар, вес и размеры, удобный способ получения…")
+                : tr("Что нужно сделать, когда удобно, что важно учесть…")
             }
           />
         </Field>
         <div className="form-row">
           {kind !== "delivery" && (
-            <Field label="Категория">
+            <Field label={tr("Категория")}>
               <select
                 name="category"
                 value={selectedCategory}
@@ -469,30 +487,32 @@ export function CreateModal({
               >
                 {CATEGORIES.filter((c) => c.id !== "all").map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name}
+                    {categoryName(c.id, language)}
                   </option>
                 ))}
               </select>
             </Field>
           )}
-          <Field label="Город">
+          <Field label={tr("Город")}>
             <select
               name="city"
               defaultValue={draft.city ?? preset?.city ?? user?.city ?? "Будва"}
             >
               {CITIES.filter((c) => c !== "Вся Черногория").map((c) => (
-                <option key={c}>{c}</option>
+                <option key={c} value={c}>
+                  {cityName(c, language)}
+                </option>
               ))}
             </select>
           </Field>
         </div>
         <div className="form-row">
           <Field
-            label={kind === "listing" ? "Стоимость от, €" : "Бюджет, €"}
+            label={kind === "listing" ? tr("Стоимость от, €") : tr("Бюджет, €")}
             hint={
               kind === "listing"
                 ? undefined
-                : "Можно оставить 0 — обсудите в откликах."
+                : tr("Можно оставить 0 — обсудите в откликах.")
             }
           >
             <input
@@ -508,31 +528,38 @@ export function CreateModal({
                 ""
               }
               required={kind === "listing"}
-              placeholder="По договорённости"
+              placeholder={tr("По договорённости")}
             />
           </Field>
           {kind === "listing" && (
-            <Field label="За что">
+            <Field label={tr("За что")}>
               <select
                 name="unit"
                 defaultValue={draft.unit ?? preset?.unit ?? "услуга"}
               >
-                <option value="услуга">За услугу</option>
-                <option value="час">За час</option>
-                <option value="порция">За порцию</option>
-                <option value="товар">За товар</option>
-                <option value="кг">За кг</option>
-                <option value="консультация">За консультацию</option>
+                <option value="услуга">{tr("За услугу")}</option>
+                <option value="час">{tr("За час")}</option>
+                <option value="порция">{tr("За порцию")}</option>
+                <option value="товар">{tr("За товар")}</option>
+                <option value="кг">{tr("За кг")}</option>
+                <option value="консультация">{tr("За консультацию")}</option>
               </select>
             </Field>
           )}
         </div>
         {kind === "listing" && (
-          <fieldset className="listing-contact-fields">
-            <legend>Контакты в объявлении</legend>
+          <details
+            className="listing-contact-fields"
+            open={!!(draft.telegram || draft.viber)}
+          >
+            <summary>
+              {tr("Контакты в объявлении")}{" "}
+              <ChevronDown size={16} aria-hidden="true" />
+            </summary>
             <p>
-              Указывайте только те контакты, которые хотите показать всем
-              посетителям.
+              {tr(
+                "Указывайте только те контакты, которые хотите показать всем посетителям.",
+              )}
             </p>
             <div className="form-row">
               <Field label="Telegram">
@@ -555,22 +582,26 @@ export function CreateModal({
                 />
               </Field>
             </div>
-          </fieldset>
+          </details>
         )}
         <div className="form-note">
           <ShieldCheck size={19} />
           <p>
-            Цена и сроки согласовываются до начала работы. Оплата — напрямую
-            между сторонами, наличными при встрече.
+            {tr(
+              "Цена и сроки согласовываются до начала работы. Оплата — напрямую между сторонами, наличными при встрече.",
+            )}
           </p>
         </div>
         <FormError message={mutation.error?.message} />
-        <button className="button primary full" disabled={mutation.isPending}>
+        <button
+          className="button primary full publication-submit"
+          disabled={mutation.isPending}
+        >
           {mutation.isPending
-            ? "Публикуем…"
+            ? tr("Публикуем…")
             : kind === "listing"
-              ? "Опубликовать предложение"
-              : "Создать заявку"}
+              ? tr("Опубликовать предложение")
+              : tr("Создать заявку")}
           <Plus size={18} />
         </button>
       </form>

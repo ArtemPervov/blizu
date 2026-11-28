@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { User } from "../shared/types";
 import { Check, CircleAlert, X } from "lucide-react";
 import { BrandSpark } from "./components/BrandIllustration";
+import { translateUi } from "./ui-translations";
 
 export async function api<T = Record<string, unknown>>(
   path: string,
@@ -47,19 +48,57 @@ export async function api<T = Record<string, unknown>>(
   return result as T;
 }
 export const json = (data: unknown) => JSON.stringify(data);
-export const euro = (value: number) =>
-  new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: "EUR",
-    maximumFractionDigits: 0,
-  }).format(value);
-export const date = (value: string) =>
-  new Intl.DateTimeFormat("ru-RU", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+const locales = { ru: "ru-RU", en: "en-IE", me: "sr-Latn-ME" } as const;
+export function preferredLanguage(): Language {
+  try {
+    const selected = localStorage.getItem("blizu-language");
+    return selected === "me" || selected === "sr"
+      ? "me"
+      : selected === "en"
+        ? "en"
+        : "ru";
+  } catch {
+    return "ru";
+  }
+}
+const numbers = new Map<Language, Intl.NumberFormat>();
+const dates = new Map<string, Intl.DateTimeFormat>();
+export function euro(value: number, language = preferredLanguage()) {
+  let format = numbers.get(language);
+  if (!format) {
+    format = new Intl.NumberFormat(locales[language], {
+      style: "currency",
+      currency: "EUR",
+      maximumFractionDigits: 0,
+    });
+    numbers.set(language, format);
+  }
+  return format.format(value);
+}
+export function date(
+  value: string,
+  variant: "time" | "short" | "long" = "time",
+) {
+  const language = preferredLanguage();
+  const key = `${language}-${variant}`;
+  let format = dates.get(key);
+  if (!format) {
+    const options: Intl.DateTimeFormatOptions =
+      variant === "long"
+        ? { dateStyle: "long" }
+        : variant === "short"
+          ? { day: "numeric", month: "short" }
+          : {
+              day: "numeric",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            };
+    format = new Intl.DateTimeFormat(locales[language], options);
+    dates.set(key, format);
+  }
+  return format.format(new Date(value));
+}
 export const plural = (n: number, forms: [string, string, string]) =>
   forms[
     n % 100 >= 11 && n % 100 <= 14
@@ -364,20 +403,17 @@ const I18nContext = createContext<{
   t: typeof dictionary.ru;
 }>(null!);
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguage] = useState<Language>(() => {
+  const [language, setLanguageState] = useState<Language>(preferredLanguage);
+  const setLanguage = (next: Language) => {
     try {
-      const l = localStorage.getItem("blizu-language");
-      return l === "me" || l === "sr" ? "me" : l === "en" ? "en" : "ru";
-    } catch {
-      return "ru";
-    }
-  });
+      localStorage.setItem("blizu-language", next);
+    } catch {}
+    setLanguageState(next);
+  };
   useEffect(() => {
     document.documentElement.lang =
       language === "me" ? "cnr-Latn-ME" : language;
-    try {
-      localStorage.setItem("blizu-language", language);
-    } catch {}
+    document.title = `blizu — ${dictionary[language].services}`;
   }, [language]);
   return (
     <I18nContext.Provider
@@ -388,11 +424,17 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   );
 }
 export const useI18n = () => useContext(I18nContext);
+export function useUiText() {
+  const { language } = useI18n();
+  return (source: string, ...values: (string | number)[]) =>
+    translateUi(language, source, ...values);
+}
 type ToastTone = "info" | "success" | "error";
 const ToastContext = createContext<(text: string, tone?: ToastTone) => void>(
   null!,
 );
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const tr = useUiText();
   const [toast, setToast] = useState<{
     id: number;
     text: string;
@@ -428,10 +470,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             )}
           </span>
           <span role={toast.tone === "error" ? "alert" : "status"}>
-            {toast.text}
+            {tr(toast.text)}
           </span>
           <button
-            aria-label="Закрыть уведомление"
+            aria-label={tr("Закрыть уведомление")}
             onClick={() => setToast(null)}
           >
             <X size={15} />

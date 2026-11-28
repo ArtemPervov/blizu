@@ -1,3 +1,4 @@
+import { useUiText } from "./lib";
 import {
   lazy,
   Suspense,
@@ -127,6 +128,7 @@ const answers = [
 ];
 
 export function DeliveryPage({ create }: { create: CreateAction }) {
+  const tr = useUiText();
   const { language, t } = useI18n();
   const showVisual = useSyncExternalStore(observeScreen, isWideScreen);
   const copy = deliveryCopy[language];
@@ -153,7 +155,9 @@ export function DeliveryPage({ create }: { create: CreateAction }) {
       </div>
       <section className="delivery-intro" aria-labelledby="delivery-title">
         <div className="delivery-intro-copy">
-          <span className="section-kicker">ИЗ ДРУГИХ СТРАН — К ВАМ ДОМОЙ</span>
+          <span className="section-kicker">
+            {tr("ИЗ ДРУГИХ СТРАН — К ВАМ ДОМОЙ")}
+          </span>
           <h1 id="delivery-title">
             <span className="desktop-delivery-title">
               {copy.title}
@@ -231,10 +235,10 @@ export function DeliveryPage({ create }: { create: CreateAction }) {
         </div>
         <div
           className="delivery-visual"
-          aria-label="Доставка из России, Китая и Европы в Черногорию"
+          aria-label={tr("Доставка из России, Китая и Европы в Черногорию")}
         >
           <div className="delivery-visual-heading">
-            <span className="tiny-label">ДАЛЬШЕ — ТОЛЬКО ПУТЬ</span>
+            <span className="tiny-label">{tr("ДАЛЬШЕ — ТОЛЬКО ПУТЬ")}</span>
             <span>RU · CN · EU → ME</span>
           </div>
           {showVisual && (
@@ -255,14 +259,14 @@ export function DeliveryPage({ create }: { create: CreateAction }) {
               <Package size={21} strokeWidth={1.4} />
             </span>
             <div>
-              <small>ТОЧКА НАЗНАЧЕНИЯ</small>
-              <strong>Черногория</strong>
+              <small>{tr("ТОЧКА НАЗНАЧЕНИЯ")}</small>
+              <strong>{tr("Черногория")}</strong>
             </div>
             <span className="destination-line" />
             <ArrowUpRight size={20} />
           </div>
           <p className="delivery-visual-caption">
-            От покупки до получения — в одном заказе
+            {tr("От покупки до получения — в одном заказе")}
           </p>
         </div>
       </section>
@@ -272,11 +276,13 @@ export function DeliveryPage({ create }: { create: CreateAction }) {
       >
         <div className="refined-section-heading">
           <div>
-            <span className="section-kicker">БЕЗ ЛИШНИХ СЛОЖНОСТЕЙ</span>
-            <h2 id="delivery-process-title">Четыре простых шага</h2>
+            <span className="section-kicker">
+              {tr("БЕЗ ЛИШНИХ СЛОЖНОСТЕЙ")}
+            </span>
+            <h2 id="delivery-process-title">{tr("Четыре простых шага")}</h2>
           </div>
           <Link className="quiet-link" to="/orders?kind=delivery">
-            Мои доставки
+            {tr("Мои доставки")}
             <ArrowUpRight size={16} />
           </Link>
         </div>
@@ -287,8 +293,8 @@ export function DeliveryPage({ create }: { create: CreateAction }) {
                 <Icon size={23} strokeWidth={1.4} />
                 <span>0{i + 1}</span>
               </div>
-              <h3>{title}</h3>
-              <p>{text}</p>
+              <h3>{tr(title)}</h3>
+              <p>{tr(text)}</p>
             </div>
           ))}
         </div>
@@ -298,19 +304,19 @@ export function DeliveryPage({ create }: { create: CreateAction }) {
         aria-labelledby="delivery-answers-title"
       >
         <div>
-          <span className="section-kicker">ПОЛЕЗНО ЗНАТЬ ЗАРАНЕЕ</span>
+          <span className="section-kicker">{tr("ПОЛЕЗНО ЗНАТЬ ЗАРАНЕЕ")}</span>
           <h2 id="delivery-answers-title">
-            Всё начинается
+            {tr("Всё начинается")}
             <br />
-            <em>с ясности.</em>
+            <em>{tr("с ясности.")}</em>
           </h2>
-          <p>Чтобы вы чувствовали себя спокойно на каждом этапе.</p>
+          <p>{tr("Чтобы вы чувствовали себя спокойно на каждом этапе.")}</p>
           <BrandIllustration kind="route" />
         </div>
         <div className="answer-list">
           {answers.map(([question, answer]) => (
-            <Accordion key={question} title={question}>
-              <p>{answer}</p>
+            <Accordion key={question} title={tr(question)}>
+              <p>{tr(answer)}</p>
             </Accordion>
           ))}
         </div>

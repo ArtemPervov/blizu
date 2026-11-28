@@ -390,6 +390,25 @@
     padding: 9px 11px 12px;
   }
 }
+@media (min-width: 761px) {
+  .discovery-catalog .listing-card,
+  .discovery-catalog
+    .listing-card
+    :is(
+      .save-button:not(.saved),
+      .listing-photo-count,
+      .listing-photo-navigation > div
+    ) {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .discovery-catalog .skeleton-card {
+    animation: none;
+  }
+  .discovery-catalog .skeleton-card > span {
+    aspect-ratio: 4 / 3;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .listing-card {
     transition: none;

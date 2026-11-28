@@ -13,15 +13,23 @@ export function ListingPhoto({
   src,
   alt,
   loading = "lazy",
+  fetchPriority,
   backdrop = false,
+  preview = false,
 }: {
   src: string;
   alt: string;
   loading?: "lazy" | "eager";
+  fetchPriority?: "high";
   backdrop?: boolean;
+  preview?: boolean;
 }) {
   const [failed, setFailed] = useState("");
   const image = src === failed ? photoPlaceholder : src;
+  const imageUrl =
+    preview && image.startsWith("/api/listing-images/")
+      ? `${image}?variant=card`
+      : image;
   return (
     <>
       {backdrop && image !== photoPlaceholder && (
@@ -36,9 +44,10 @@ export function ListingPhoto({
       )}
       <img
         className="listing-photo"
-        src={image}
+        src={imageUrl}
         alt={alt}
         loading={loading}
+        fetchPriority={fetchPriority}
         decoding="async"
         onError={() => setFailed(src)}
       />

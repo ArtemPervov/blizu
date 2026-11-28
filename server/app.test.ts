@@ -77,11 +77,7 @@ test("catalog filters are applied before pagination and include a stable total",
   }
 });
 
-function fixture(
-  demo = true,
-  deliveryEnabled = true,
-  assistant?: AppOptions["assistant"],
-) {
+function fixture(demo = true, deliveryEnabled = true, assistant?: AppOptions["assistant"]) {
   const dir = mkdtempSync(join(tmpdir(), "blizu-test-"));
   const store = new Store(":memory:");
   const result = createApp({
@@ -111,23 +107,15 @@ test("Ollama chat works for guests, answers greetings locally and streams model 
   const disabled = fixture();
   try {
     const client = request(disabled.app);
-    assert.equal(
-      (await client.get("/api/meta").expect(200)).body.assistantEnabled,
-      false,
-    );
-    await client
-      .post("/api/assistant/chat")
-      .send({ language: "ru", message: "Вопрос" })
-      .expect(404);
+    assert.equal((await client.get("/api/meta").expect(200)).body.assistantEnabled, false);
+    await client.post("/api/assistant/chat").send({ language: "ru", message: "Вопрос" }).expect(404);
   } finally {
     disabled.cleanup();
   }
 
   const forwarded: { url?: string; payload: Record<string, unknown> }[] = [];
   let finishStream!: () => void;
-  const waitForFirstEvent = new Promise<void>((resolve) => {
-    finishStream = resolve;
-  });
+  const waitForFirstEvent = new Promise<void>((resolve) => { finishStream = resolve; });
   const upstream = createServer(async (req, res) => {
     req.setEncoding("utf8");
     let raw = "";
@@ -141,26 +129,14 @@ test("Ollama chat works for guests, answers greetings locally and streams model 
     }
     if (payload.stream) {
       res.setHeader("Content-Type", chatStreamType);
-      res.write(
-        JSON.stringify({ message: { content: "Откройте " }, done: false }) +
-          "\n",
-      );
+      res.write(JSON.stringify({ message: { content: "Откройте " }, done: false }) + "\n");
       await waitForFirstEvent;
-      res.end(
-        JSON.stringify({
-          message: { content: "раздел «Мои заказы»." },
-          done: true,
-        }) + "\n",
-      );
+      res.end(JSON.stringify({ message: { content: "раздел «Мои заказы»." }, done: true }) + "\n");
       return;
     }
     res.setHeader("Content-Type", "application/json");
     if (forwarded.length === 1) {
-      res.end(
-        JSON.stringify({
-          message: { content: "Откройте раздел «Мои заказы»." },
-        }),
-      );
+      res.end(JSON.stringify({ message: { content: "Откройте раздел «Мои заказы»." } }));
     } else {
       res.writeHead(503).end();
     }
@@ -185,23 +161,11 @@ test("Ollama chat works for guests, answers greetings locally and streams model 
   try {
     const guest = request(enabled.app);
     const chat = { language: "ru", message: "Где мои заказы?" };
-    assert.equal(
-      (await guest.get("/api/meta").expect(200)).body.assistantEnabled,
-      true,
-    );
+    assert.equal((await guest.get("/api/meta").expect(200)).body.assistantEnabled, true);
     const endpoint = "/api/assistant/chat";
-    await guest
-      .post(endpoint)
-      .set("Origin", "https://other.test")
-      .send(chat)
-      .expect(403);
-    await guest
-      .post(endpoint)
-      .send({ ...chat, history: [{ role: "system", content: "Other" }] })
-      .expect(400);
-    await guest
-      .post(endpoint)
-      .send({ ...chat, message: "Привет!" })
+    await guest.post(endpoint).set("Origin", "https://other.test").send(chat).expect(403);
+    await guest.post(endpoint).send({ ...chat, history: [{ role: "system", content: "Other" }] }).expect(400);
+    await guest.post(endpoint).send({ ...chat, message: "Привет!" })
       .expect(200, { answer: "Привет! Чем могу помочь в Blizu?" });
     assert.equal(forwarded.length, 0);
     await preloadAssistant(config);
@@ -215,53 +179,32 @@ test("Ollama chat works for guests, answers greetings locally and streams model 
         options: { num_ctx: 4096 },
       },
     });
-    await guest
-      .post(endpoint)
-      .send(chat)
-      .expect(200, { answer: "Откройте раздел «Мои заказы»." });
+    await guest.post(endpoint).send(chat).expect(200, { answer: "Откройте раздел «Мои заказы»." });
     assert.equal(forwarded[0].url, "/api/chat");
     assert.equal(forwarded[0].payload.model, "qwen3:8b");
     assert.equal(forwarded[0].payload.stream, false);
     assert.equal(forwarded[0].payload.keep_alive, -1);
-    const messages = forwarded[0].payload.messages as {
-      role: string;
-      content: string;
-    }[];
-    assert.deepEqual(
-      messages.map(({ role }) => role),
-      ["system", "user"],
-    );
+    const messages = forwarded[0].payload.messages as { role: string; content: string }[];
+    assert.deepEqual(messages.map(({ role }) => role), ["system", "user"]);
     assert.equal(messages[1].content, chat.message);
     await guest.post(endpoint).send(chat).expect(503);
 
     const listenAddress = http.address();
     assert.ok(listenAddress && typeof listenAddress === "object");
-    const response = await fetch(
-      `http://127.0.0.1:${listenAddress.port}${endpoint}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: chatStreamType },
-        body: JSON.stringify(chat),
-        signal: AbortSignal.timeout(5000),
-      },
-    );
+    const response = await fetch(`http://127.0.0.1:${listenAddress.port}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: chatStreamType },
+      body: JSON.stringify(chat),
+      signal: AbortSignal.timeout(5000),
+    });
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("X-Accel-Buffering"), "no");
     assert.ok(response.body);
     const events = readJsonLines(response.body);
-    assert.deepEqual(await events.next(), {
-      value: { delta: "Откройте " },
-      done: false,
-    });
+    assert.deepEqual(await events.next(), { value: { delta: "Откройте " }, done: false });
     finishStream();
-    assert.deepEqual(await events.next(), {
-      value: { delta: "раздел «Мои заказы»." },
-      done: false,
-    });
-    assert.deepEqual(await events.next(), {
-      value: { done: true },
-      done: false,
-    });
+    assert.deepEqual(await events.next(), { value: { delta: "раздел «Мои заказы»." }, done: false });
+    assert.deepEqual(await events.next(), { value: { done: true }, done: false });
     assert.equal((await events.next()).done, true);
     assert.equal(forwarded[2].payload.stream, true);
   } finally {
@@ -577,11 +520,75 @@ test("registration, persistent session, logout and protection against role escal
       .post("/api/auth/login")
       .send({ email: "TEST@example.com", password: "long-password-2026" })
       .expect(200);
-    await agent.post("/api/listings").send({}).expect(403);
+    await agent
+      .post("/api/listings")
+      .send({
+        title: "Помощь с переездом",
+        description: "Помогу упаковать и перевезти вещи по Будве.",
+        category: "repair",
+        city: "Будва",
+        price: 25,
+        unit: "услуга",
+      })
+      .expect(201);
     await request(f.app)
       .post("/api/auth/demo")
       .send({ role: "arbiter" })
       .expect(404);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("listing conversations notify the author and only participants can read or reply", async () => {
+  const f = fixture();
+  try {
+    const buyer = await login(f.app, "customer");
+    const author = await login(f.app, "provider");
+    const outsider = await login(f.app, "arbiter");
+    const { id } = (
+      await buyer
+        .post("/api/listings/l-repair/conversations")
+        .send({ text: "Здравствуйте! Когда можно договориться?" })
+        .expect(201)
+    ).body;
+    assert.equal(
+      (await author.get("/api/conversations").expect(200)).body.items[0].id,
+      id,
+    );
+    assert.ok(
+      (await author.get("/api/notifications").expect(200)).body.items.some(
+        (item: { href: string }) => item.href.endsWith(id),
+      ),
+    );
+    await outsider.get(`/api/conversations/${id}`).expect(404);
+    await outsider
+      .post(`/api/conversations/${id}/messages`)
+      .send({ text: "Проверка" })
+      .expect(404);
+    await author
+      .post(`/api/conversations/${id}/messages`)
+      .send({ text: "Завтра после обеда." })
+      .expect(201);
+    assert.deepEqual(
+      (
+        await buyer.get(`/api/conversations/${id}`).expect(200)
+      ).body.messages.map((item: { text: string }) => item.text),
+      ["Здравствуйте! Когда можно договориться?", "Завтра после обеда."],
+    );
+    await author.delete("/api/notifications").send({}).expect(200);
+    assert.equal(
+      (await author.get("/api/notifications").expect(200)).body.items.length,
+      0,
+    );
+    assert.ok(
+      (await buyer.get("/api/notifications").expect(200)).body.items.length > 0,
+    );
+    const { provider, items } = (
+      await request(f.app).get("/api/providers/demo-provider").expect(200)
+    ).body;
+    assert.equal(provider.email, undefined);
+    assert.ok(items.some((item: { id: string }) => item.id === "l-repair"));
   } finally {
     f.cleanup();
   }
@@ -592,6 +599,32 @@ test("listing details publish only contacts explicitly supplied by a provider", 
   try {
     const guest = request(f.app);
     const provider = await login(f.app, "provider");
+    await guest.get("/api/profile").expect(401);
+    await guest.patch("/api/profile").send({}).expect(401);
+    const { profile } = (await provider.get("/api/profile").expect(200)).body;
+    assert.equal(profile.showListingContacts, false);
+    const savedProfile = (
+      await provider
+        .patch("/api/profile")
+        .send({
+          ...profile,
+          name: "Алексей Мастер",
+          bio: "Ремонтирую бытовую технику.",
+          telegram: "https://t.me/master_profile/",
+          viber: "+382 (67) 123-456",
+        })
+        .expect(200)
+    ).body.profile;
+    assert.equal(savedProfile.telegram, "master_profile");
+    assert.equal(savedProfile.viber, "+38267123456");
+    assert.equal(
+      (await provider.get("/api/auth/me").expect(200)).body.user.name,
+      "Алексей Мастер",
+    );
+    await provider
+      .patch("/api/profile")
+      .send({ ...savedProfile, verified: true })
+      .expect(400);
     const input = {
       title: "Ремонт бытовой техники",
       description: "Диагностика и ремонт бытовой техники на дому.",
@@ -608,6 +641,18 @@ test("listing details publish only contacts explicitly supplied by a provider", 
       .get(`/api/listings/${privateListing.body.id}`)
       .expect(200);
     assert.equal(privateDetail.body.item.publicContact, undefined);
+    assert.equal(privateDetail.body.item.providerBio, savedProfile.bio);
+    await provider
+      .patch("/api/profile")
+      .send({ ...savedProfile, showListingContacts: true })
+      .expect(200);
+    const inherited = await guest
+      .get(`/api/listings/${privateListing.body.id}`)
+      .expect(200);
+    assert.deepEqual(inherited.body.item.publicContact, {
+      telegram: savedProfile.telegram,
+      viber: savedProfile.viber,
+    });
 
     await provider
       .post("/api/listings")
@@ -628,6 +673,15 @@ test("listing details publish only contacts explicitly supplied by a provider", 
       telegram: "blizu_example",
       viber: "+38267555010",
     });
+    await provider
+      .patch("/api/profile")
+      .send({ ...savedProfile, showListingContacts: false })
+      .expect(200);
+    assert.equal(
+      (await guest.get(`/api/listings/${privateListing.body.id}`).expect(200))
+        .body.item.publicContact,
+      undefined,
+    );
     const search = await guest
       .get("/api/listings")
       .query({ q: input.title })

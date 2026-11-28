@@ -1,10 +1,17 @@
+import { useUiText } from "./lib";
 import {
   useEffect,
   useState,
   useSyncExternalStore,
   type FormEvent,
 } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -24,6 +31,7 @@ import {
   MessageCircle,
   Package,
   Plus,
+  Search,
   Send,
   Share2,
   ShieldCheck,
@@ -35,6 +43,7 @@ import {
   CATEGORIES,
   CITIES,
   STATUS_LABELS,
+  isMarketplaceUser,
   type Incident,
   type Listing,
   type Offer,
@@ -59,19 +68,23 @@ import { BrandIllustration } from "./components/BrandIllustration";
 import { getOrderAction } from "./order-state";
 import { ReportButton, type ReportTarget } from "./components/ReportButton";
 import { ListingGallery } from "./components/ListingGallery";
+import { ListingConversationForm } from "./components/ListingConversationForm";
 import { listingAuthor, listingCity } from "./listing-format";
 import { useListingFavorite } from "./listing-favorite";
 import { categoryName, cityName } from "./market-copy";
 
 function LoginRequired({ onLogin }: { onLogin: () => void }) {
+  const tr = useUiText();
   return (
     <Empty
-      title="Ваши дела — в одном месте"
-      description="Войдите, чтобы создавать заявки, договариваться и следить за заказами."
+      title={tr("Ваши дела — в одном месте")}
+      description={tr(
+        "Войдите, чтобы создавать заявки, договариваться и следить за заказами.",
+      )}
     >
       <button className="button primary" onClick={onLogin}>
         <UserRound size={17} />
-        Войти в аккаунт
+        {tr("Войти в аккаунт")}
       </button>
     </Empty>
   );
@@ -83,6 +96,8 @@ export function RequestCard({
   item: ServiceRequest;
   showStatus?: boolean;
 }) {
+  const tr = useUiText();
+  const { language } = useI18n();
   return (
     <Link className="request-card" to={`/requests/${item.id}`}>
       <div
@@ -98,20 +113,20 @@ export function RequestCard({
         <div className="request-meta">
           <span>
             <MapPin size={12} />
-            {item.city}
+            {cityName(item.city, language)}
           </span>
           <span>
             {item.kind === "delivery"
-              ? "Доставка"
-              : CATEGORIES.find((c) => c.id === item.category)?.name}
+              ? tr("Доставка")
+              : categoryName(item.category, language)}
           </span>
           {showStatus && (
             <span className={`request-state request-state-${item.status}`}>
               {item.status === "open"
-                ? "Открыта"
+                ? tr("Открыта")
                 : item.status === "assigned"
-                  ? "Исполнитель выбран"
-                  : "Закрыта"}
+                  ? tr("Исполнитель выбран")
+                  : tr("Закрыта")}
             </span>
           )}
         </div>
@@ -124,13 +139,13 @@ export function RequestCard({
           </span>
           <span>
             <MessageCircle size={13} />
-            {item.offerCount} откликов
+            {item.offerCount} {tr("откликов")}
           </span>
         </div>
       </div>
       <div className="request-price">
-        <strong>{item.budget ? euro(item.budget) : "Обсудим"}</strong>
-        <span>{item.budget ? "бюджет" : "стоимость"}</span>
+        <strong>{item.budget ? euro(item.budget) : tr("Обсудим")}</strong>
+        <span>{item.budget ? tr("бюджет") : tr("стоимость")}</span>
         <ArrowUpRight size={20} />
       </div>
     </Link>
@@ -148,42 +163,78 @@ export function RequestsPage({
   create: CreateAction;
   deliveryEnabled: boolean;
 }) {
+  const tr = useUiText();
   const { language } = useI18n();
+  const [params, setParams] = useSearchParams();
+  const q = (params.get("q") ?? "").slice(0, 200);
+  const [search, setSearch] = useState(q);
   const [category, setCategory] = useState("all");
   const [kind, setKind] = useState("");
+  useEffect(() => setSearch(q), [q]);
   const query = new URLSearchParams({
     city,
     category,
+    ...(q ? { q } : {}),
     ...(kind ? { kind } : {}),
   });
   const { data, isPending, error, refetch } = useQuery({
-    queryKey: ["requests", city, category, kind],
+    queryKey: ["requests", city, category, kind, q],
     queryFn: () => api<{ items: ServiceRequest[] }>(`/requests?${query}`),
   });
   return (
     <div className="page-shell">
       <div className="page-heading heading-with-action">
         <div>
-          <span className="section-kicker">ПОМОЩЬ НАЧИНАЕТСЯ С ЗАПРОСА</span>
+          <span className="section-kicker">
+            {tr("ПОМОЩЬ НАЧИНАЕТСЯ С ЗАПРОСА")}
+          </span>
           <h1>
-            Ищу исполнителя<span className="heading-dot">.</span>
+            {tr("Ищу исполнителя")}
+            <span className="heading-dot">.</span>
           </h1>
           <p>
-            У кого-то есть задача. У кого-то — свободное время и нужный навык.
+            {tr(
+              "У кого-то есть задача. У кого-то — свободное время и нужный навык.",
+            )}
           </p>
         </div>
         <button className="button primary" onClick={() => create("request")}>
           <Plus size={18} />
-          Создать заявку
+          {tr("Создать заявку")}
         </button>
       </div>
+      <form
+        role="search"
+        className="request-search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setParams(search.trim() ? { q: search.trim() } : {}, {
+            preventScrollReset: true,
+          });
+        }}
+      >
+        <label>
+          <Search size={18} aria-hidden="true" />
+          <span className="visually-hidden">{tr("Поиск по заявкам")}</span>
+          <input
+            type="search"
+            value={search}
+            maxLength={200}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={tr("Поиск по заявкам")}
+          />
+        </label>
+        <button className="button primary" type="submit">
+          {tr("Найти")}
+        </button>
+      </form>
       <div className="filter-bar">
         {deliveryEnabled && (
           <div className="pill-tabs">
             {[
-              ["", "Все заявки"],
-              ["service", "Услуги"],
-              ["delivery", "Доставка"],
+              ["", tr("Все заявки")],
+              ["service", tr("Услуги")],
+              ["delivery", tr("Доставка")],
             ].map(([value, label]) => (
               <button
                 className={kind === value ? "active" : ""}
@@ -199,10 +250,10 @@ export function RequestsPage({
         <div
           className="filter-bar-selects"
           role="group"
-          aria-label="Фильтры заявок"
+          aria-label={tr("Фильтры заявок")}
         >
           <select
-            aria-label="Категория заявок"
+            aria-label={tr("Категория заявок")}
             value={category}
             onChange={(e) => setCategory(e.target.value)}
           >
@@ -213,7 +264,7 @@ export function RequestsPage({
             ))}
           </select>
           <select
-            aria-label="Город заявок"
+            aria-label={tr("Город заявок")}
             value={city}
             onChange={(e) => setCity(e.target.value)}
           >
@@ -235,14 +286,22 @@ export function RequestsPage({
             data.items.map((item) => <RequestCard key={item.id} item={item} />)
           ) : (
             <Empty
-              title="Пока тихо"
-              description="Создайте первую заявку в этой категории — пусть нужные люди вас найдут."
+              title={tr("Пока тихо")}
+              description={
+                q
+                  ? tr(
+                      "Попробуйте другой поисковый запрос или измените фильтры.",
+                    )
+                  : tr(
+                      "Создайте первую заявку в этой категории — пусть нужные люди вас найдут.",
+                    )
+              }
             >
               <button
                 className="button primary"
                 onClick={() => create("request")}
               >
-                Создать заявку
+                {tr("Создать заявку")}
               </button>
             </Empty>
           )}
@@ -252,26 +311,27 @@ export function RequestsPage({
             <Handshake size={29} />
           </span>
           <h3>
-            Хорошие дела
+            {tr("Хорошие дела")}
             <br />
-            находят своих людей.
+            {tr("находят своих людей.")}
           </h3>
           <p>
-            Опишите задачу, сравните отклики и выберите человека, которому
-            доверяете.
+            {tr(
+              "Опишите задачу, сравните отклики и выберите человека, которому доверяете.",
+            )}
           </p>
           <div className="help-divider" />
           <span>
             <Check size={15} />
-            Цена до начала работы
+            {tr("Цена до начала работы")}
           </span>
           <span>
             <Check size={15} />
-            Контакты после выбора
+            {tr("Контакты после выбора")}
           </span>
           <span>
             <Check size={15} />
-            Помощь при споре
+            {tr("Помощь при споре")}
           </span>
         </aside>
       </div>
@@ -280,6 +340,8 @@ export function RequestsPage({
 }
 
 export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
+  const tr = useUiText();
+  const { language } = useI18n();
   const { id } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -298,7 +360,7 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["request", id] });
-      toast("Отклик отправлен. Заказчик получил уведомление.");
+      toast(tr("Отклик отправлен. Заказчик получил уведомление."));
     },
   });
   const accept = useMutation({
@@ -310,7 +372,7 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
     onSuccess: (r) => {
       qc.invalidateQueries();
       navigate(`/orders/${r.id}`);
-      toast("Исполнитель выбран. Условия сохранены в заказе.");
+      toast(tr("Исполнитель выбран. Условия сохранены в заказе."));
     },
   });
   if (isPending)
@@ -332,7 +394,7 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
     <div className="page-shell">
       <Link className="back-link" to="/requests">
         <ArrowLeft size={16} />
-        Все заявки
+        {tr("Все заявки")}
       </Link>
       <div className="detail-layout">
         <div>
@@ -340,16 +402,16 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
             className={`status-pill ${item.status === "open" ? "green-pill" : ""}`}
           >
             {item.status === "open"
-              ? "Ищет исполнителя"
+              ? tr("Ищет исполнителя")
               : item.status === "assigned"
-                ? "Исполнитель выбран"
-                : "Заявка закрыта"}
+                ? tr("Исполнитель выбран")
+                : tr("Заявка закрыта")}
           </span>
           <h1 className="detail-title">{item.title}</h1>
           <div className="detail-meta">
             <span>
               <MapPin size={15} />
-              {item.city}
+              {cityName(item.city, language)}
             </span>
             <span>
               <Clock3 size={15} />
@@ -361,13 +423,13 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
             </span>
           </div>
           <section className="content-card">
-            <h2>О задаче</h2>
+            <h2>{tr("О задаче")}</h2>
             <p className="preserve-lines">{item.description}</p>
             {item.kind === "delivery" && (
               <div className="delivery-details">
                 <span>
                   <Package size={17} />
-                  Отправление: {item.origin}
+                  {tr("Отправление:")} {item.origin}
                 </span>
                 {item.productUrl && (
                   <a
@@ -375,7 +437,7 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Посмотреть товар
+                    {tr("Посмотреть товар")}
                     <ExternalLink size={14} />
                   </a>
                 )}
@@ -384,17 +446,18 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
           </section>
           <section className="content-card">
             <h2>
-              {owner ? "Отклики исполнителей" : "Отклики"}{" "}
+              {owner ? tr("Отклики исполнителей") : tr("Отклики")}{" "}
               <span className="count-badge">{item.offerCount}</span>
             </h2>
             {!user ? (
               <p className="muted">
-                Войдите, чтобы откликнуться или увидеть свой отклик.
+                {tr("Войдите, чтобы откликнуться или увидеть свой отклик.")}
               </p>
             ) : !owner && user.role !== "arbiter" ? (
               <p className="muted small">
-                Вам видны только ваши отклики. Полный список доступен автору
-                заявки.
+                {tr(
+                  "Вам видны только ваши отклики. Полный список доступен автору заявки.",
+                )}
               </p>
             ) : null}
             {offers.length ? (
@@ -407,7 +470,7 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
                       <span className="offer-rating">
                         <Star size={12} fill="currentColor" />
                         {o.providerRating.toFixed(1)}
-                        <span>Исполнитель</span>
+                        <span>{tr("Исполнитель")}</span>
                       </span>
                     </div>
                     <strong className="offer-price">{euro(o.price)}</strong>
@@ -423,7 +486,7 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
                       disabled={accept.isPending}
                       onClick={() => accept.mutate(o.id)}
                     >
-                      Выбрать за {euro(o.price)}
+                      {tr("Выбрать за")} {euro(o.price)}
                       <Check size={16} />
                     </button>
                   )}
@@ -432,8 +495,8 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
             ) : (
               <div className="muted padded">
                 {owner
-                  ? "Первые отклики появятся здесь. Мы уведомим вас."
-                  : "Пока нет доступных откликов."}
+                  ? tr("Первые отклики появятся здесь. Мы уведомим вас.")
+                  : tr("Пока нет доступных откликов.")}
               </div>
             )}
             <FormError message={accept.error?.message} />
@@ -441,20 +504,21 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
         </div>
         <aside className="sticky-aside">
           <div className="content-card">
-            <span className="section-kicker">БЮДЖЕТ ЗАКАЗЧИКА</span>
+            <span className="section-kicker">{tr("БЮДЖЕТ ЗАКАЗЧИКА")}</span>
             <div className="big-price">
-              {item.budget ? euro(item.budget) : "Обсудим"}
+              {item.budget ? euro(item.budget) : tr("Обсудим")}
             </div>
             <p className="muted small">
-              Итоговая цена фиксируется при выборе отклика. Оплата — при личной
-              встрече.
+              {tr(
+                "Итоговая цена фиксируется при выборе отклика. Оплата — при личной встрече.",
+              )}
             </p>
             {!user ? (
               <button className="button primary full" onClick={requireLogin}>
-                Войти и откликнуться
+                {tr("Войти и откликнуться")}
                 <ArrowRight size={16} />
               </button>
-            ) : user.role === "provider" &&
+            ) : isMarketplaceUser(user.role) &&
               !owner &&
               item.status === "open" &&
               !already ? (
@@ -465,8 +529,8 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
                   offer.mutate(new FormData(e.currentTarget));
                 }}
               >
-                <h3>Поможете с задачей?</h3>
-                <Field label="Ваша цена, €">
+                <h3>{tr("Поможете с задачей?")}</h3>
+                <Field label={tr("Ваша цена, €")}>
                   <input
                     type="number"
                     name="price"
@@ -474,26 +538,26 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
                     min={1}
                     max={1000000}
                     step="0.01"
-                    placeholder="Итоговая стоимость"
+                    placeholder={tr("Итоговая стоимость")}
                   />
                 </Field>
-                <Field label="Когда сможете">
+                <Field label={tr("Когда сможете")}>
                   <input
                     name="eta"
                     required
                     minLength={3}
                     maxLength={120}
-                    placeholder="Например, завтра после 14:00"
+                    placeholder={tr("Например, завтра после 14:00")}
                   />
                 </Field>
-                <Field label="Сообщение">
+                <Field label={tr("Сообщение")}>
                   <textarea
                     name="message"
                     required
                     minLength={10}
                     maxLength={2000}
                     rows={3}
-                    placeholder="Как поможете, что входит в цену…"
+                    placeholder={tr("Как поможете, что входит в цену…")}
                   />
                 </Field>
                 <FormError message={offer.error?.message} />
@@ -501,7 +565,7 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
                   className="button primary full"
                   disabled={offer.isPending}
                 >
-                  {offer.isPending ? "Отправляем…" : "Отправить отклик"}
+                  {offer.isPending ? tr("Отправляем…") : tr("Отправить отклик")}
                   <Send size={16} />
                 </button>
               </form>
@@ -510,12 +574,12 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
                 <ShieldCheck size={20} />
                 <p>
                   {owner
-                    ? "Сравните предложения и выберите подходящее."
+                    ? tr("Сравните предложения и выберите подходящее.")
                     : already
-                      ? "Ваш отклик отправлен. Ждём решения заказчика."
-                      : user.role === "provider"
-                        ? "По заявке уже выбран исполнитель."
-                        : "Откликаться могут аккаунты исполнителей."}
+                      ? tr("Ваш отклик отправлен. Ждём решения заказчика.")
+                      : isMarketplaceUser(user.role)
+                        ? tr("По заявке уже выбран исполнитель.")
+                        : tr("Откликаться могут аккаунты исполнителей.")}
                 </p>
               </div>
             )}
@@ -527,10 +591,10 @@ export function RequestPage({ requireLogin }: { requireLogin: () => void }) {
 }
 
 export function ListingPage({
-  create,
+  authorize,
   report,
 }: {
-  create: CreateAction;
+  authorize: (action: () => void) => void;
   report: (target: ReportTarget) => void;
 }) {
   const { id } = useParams();
@@ -556,27 +620,31 @@ export function ListingPage({
         <ErrorState error={error} retry={refetch} />
       </div>
     );
-  return <ListingDetail listing={data.item} create={create} report={report} />;
+  return (
+    <ListingDetail listing={data.item} authorize={authorize} report={report} />
+  );
 }
 
 function ListingDetail({
   listing,
-  create,
+  authorize,
   report,
 }: {
   listing: Listing;
-  create: CreateAction;
+  authorize: (action: () => void) => void;
   report: (target: ReportTarget) => void;
 }) {
+  const tr = useUiText();
   const { user } = useAuth();
   const toast = useToast();
   const { language, t } = useI18n();
   const { state } = useLocation();
   const navigate = useNavigate();
   const [shareUrl, setShareUrl] = useState("");
+  const [messageOpen, setMessageOpen] = useState(false);
   const from =
     typeof state?.from === "string" &&
-    /^\/(?:favorites|dashboard|operator|listings\/[^/?#]+)?(?:[?#]|$)/.test(
+    /^\/(?:favorites|dashboard|operator|order-help|providers\/[^/?#]+|listings\/[^/?#]+)?(?:[?#]|$)/.test(
       state.from,
     )
       ? state.from
@@ -587,12 +655,14 @@ function ListingDetail({
   const author = listingAuthor(listing);
   const category = categoryName(listing.category, language);
   const contact = listing.publicContact;
-  const price = source?.priceLabel ?? euro(listing.price);
+  const price = source ? tr(source.priceLabel) : euro(listing.price);
   const tags = listing.tags.filter((tag) => !source || tag !== "Из Telegram");
   const visible = !listing.hidden && !listing.ownerBlocked;
   const favoriteProps = {
     "aria-pressed": favorite.saved,
-    "aria-label": favorite.saved ? "Убрать из избранного" : "В избранное",
+    "aria-label": favorite.saved
+      ? tr("Убрать из избранного")
+      : tr("В избранное"),
     "aria-busy": favorite.busy,
     disabled: favorite.busy,
     onClick: favorite.toggle,
@@ -601,7 +671,7 @@ function ListingDetail({
   const priceContent = (
     <>
       {price}
-      {!source && <small> / {listing.unit}</small>}
+      {!source && <small> / {tr(listing.unit)}</small>}
     </>
   );
   async function shareListing() {
@@ -680,7 +750,7 @@ function ListingDetail({
           {priceContent}
         </p>
         <p className="listing-detail-kicker">
-          {category ?? "Местное предложение"}
+          {category ?? tr("Местное предложение")}
         </p>
         <h1>{listing.title}</h1>
         <div className="listing-detail-meta">
@@ -698,7 +768,7 @@ function ListingDetail({
               <span>
                 <Star size={14} fill="currentColor" />
                 {listing.providerRating.toFixed(1)} · {listing.reviewCount}{" "}
-                оценок
+                {tr("оценок")}
               </span>
             )
           )}
@@ -714,22 +784,22 @@ function ListingDetail({
       {listing.hidden && (
         <p className="listing-moderation-notice">
           <EyeOff size={17} />
-          Скрыто оператором: {listing.moderationReason}
+          {tr("Скрыто оператором:")} {listing.moderationReason}
         </p>
       )}
       {listing.ownerBlocked && (
         <p className="listing-moderation-notice">
-          Автор заблокирован. Предложение недоступно в каталоге.
+          {tr("Автор заблокирован. Предложение недоступно в каталоге.")}
         </p>
       )}
       <div className="listing-detail-layout">
         <ListingGallery key={listing.id} listing={listing} />
         <aside
           className="listing-detail-panel"
-          aria-label="Цена и связь с автором"
+          aria-label={tr("Цена и связь с автором")}
         >
           <p className="listing-detail-price-label">
-            {source ? "Условия автора" : "Стоимость от"}
+            {source ? tr("Условия автора") : tr("Стоимость от")}
           </p>
           <p className={priceClass}>{priceContent}</p>
           <div className="listing-detail-actions">
@@ -744,18 +814,14 @@ function ListingDetail({
                 >
                   {t.openTelegram} <ExternalLink size={17} />
                 </a>
-              ) : contact ? (
-                <a className="button primary full" href="#listing-contacts">
-                  {t.contactSeller} <MessageCircle size={17} />
-                </a>
-              ) : (
+              ) : visible && user?.id !== listing.providerId ? (
                 <button
                   className="button primary full"
-                  onClick={() => create("request", listing)}
+                  onClick={() => authorize(() => setMessageOpen(true))}
                 >
-                  {t.newRequest} <ArrowUpRight size={18} />
+                  {tr("Написать автору")} <MessageCircle size={17} />
                 </button>
-              )}
+              ) : null}
             </div>
             {contact && (
               <div
@@ -795,7 +861,7 @@ function ListingDetail({
                   size={17}
                   fill={favorite.saved ? "currentColor" : "none"}
                 />
-                {favorite.saved ? "В избранном" : "В избранное"}
+                {favorite.saved ? tr("В избранном") : tr("В избранное")}
               </button>
             )}
           </div>
@@ -807,25 +873,40 @@ function ListingDetail({
             </span>
             <div>
               <strong>
-                {author}
+                {source || !visible ? (
+                  author
+                ) : (
+                  <Link to={`/providers/${listing.providerId}`}>{author}</Link>
+                )}
                 {!source && listing.providerVerified && (
                   <BadgeCheck
                     size={17}
                     className="green"
-                    aria-label="Профиль с отметкой"
+                    aria-label={tr("Профиль с отметкой")}
                   />
                 )}
               </strong>
               <span>
-                {source ? "Автор объявления в Telegram" : "Местный исполнитель"}
+                {source
+                  ? tr("Автор объявления в Telegram")
+                  : tr("Местный исполнитель")}
               </span>
             </div>
           </div>
+          {!source && listing.providerBio && (
+            <p className="listing-provider-bio preserve-lines">
+              {listing.providerBio}
+            </p>
+          )}
           {!contact && (
             <p className="listing-detail-hint">
               {source
-                ? "Наличие и условия можно уточнить у автора в оригинальной публикации."
-                : "Исполнители пришлют отклики на заявку. Контакты откроются после выбора исполнителя."}
+                ? tr(
+                    "Наличие и условия можно уточнить у автора в оригинальной публикации.",
+                  )
+                : tr(
+                    "Уточните наличие, цену или детали услуги в личном диалоге.",
+                  )}
             </p>
           )}
           {!source && (
@@ -839,7 +920,7 @@ function ListingDetail({
           )}
         </aside>
         <section className="listing-detail-description">
-          <h2>{source ? "Описание объявления" : "Чем могу помочь"}</h2>
+          <h2>{source ? tr("Описание объявления") : tr("Чем могу помочь")}</h2>
           <p className="preserve-lines">{listing.description}</p>
           {!!tags.length && (
             <div className="tag-list">
@@ -852,9 +933,12 @@ function ListingDetail({
             <div className="listing-detail-provenance">
               <Send size={17} />
               <div>
-                <span>Публикация в @{source.channel}</span>
+                <span>
+                  {tr("Публикация в @")}
+                  {source.channel}
+                </span>
                 <a href={source.url} target="_blank" rel="noopener noreferrer">
-                  Оригинал объявления <ExternalLink size={13} />
+                  {tr("Оригинал объявления")} <ExternalLink size={13} />
                 </a>
               </div>
             </div>
@@ -874,13 +958,19 @@ function ListingDetail({
                   "/operator?tab=listings&q=" + encodeURIComponent(listing.id)
                 }
               >
-                Модерация предложения <ArrowUpRight size={15} />
+                {tr("Модерация предложения")} <ArrowUpRight size={15} />
               </Link>
             )}
           </div>
         </section>
       </div>
       {visible && <SimilarListings listing={listing} />}
+      {messageOpen && (
+        <ListingConversationForm
+          listing={listing}
+          onClose={() => setMessageOpen(false)}
+        />
+      )}
       {shareUrl && (
         <Modal title={t.shareListing} onClose={() => setShareUrl("")}>
           <Field label={t.listingLink}>
@@ -936,6 +1026,8 @@ function SimilarListings({ listing }: { listing: Listing }) {
 }
 
 export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
+  const tr = useUiText();
+  const { language } = useI18n();
   const { id } = useParams();
   const { user, loading } = useAuth();
   const qc = useQueryClient();
@@ -960,7 +1052,7 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
       }),
     onSuccess: () => {
       refresh();
-      toast("Статус заказа обновлён");
+      toast(tr("Статус заказа обновлён"));
     },
   });
   const send = useMutation({
@@ -1005,22 +1097,25 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
     <div className="page-shell">
       <Link className="back-link" to="/orders">
         <ArrowLeft size={16} />
-        Все заказы
+        {tr("Все заказы")}
       </Link>
       <div className="page-heading">
         <span className="section-kicker">
-          ЗАКАЗ #{order.id.slice(0, 8).toUpperCase()}
+          {tr("ЗАКАЗ #")}
+          {order.id.slice(0, 8).toUpperCase()}
         </span>
         <h1 className="order-title">{order.title}</h1>
         <div className="detail-meta">
           <span className={`status-pill status-${order.status}`}>
-            {STATUS_LABELS[order.status]}
+            {tr(STATUS_LABELS[order.status])}
           </span>
           <span>
             <MapPin size={15} />
-            {order.city}
+            {cityName(order.city, language)}
           </span>
-          <span>Обновлён {date(order.updatedAt)}</span>
+          <span>
+            {tr("Обновлён")} {date(order.updatedAt)}
+          </span>
         </div>
       </div>
       <div className="detail-layout">
@@ -1029,8 +1124,8 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
             <div className="card-section-header">
               <h2>
                 {order.kind === "delivery"
-                  ? "Путь вашей посылки"
-                  : "История заказа"}
+                  ? tr("Путь вашей посылки")
+                  : tr("История заказа")}
               </h2>
               {order.kind === "delivery" && (
                 <Truck size={23} className="muted" />
@@ -1048,7 +1143,7 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
                   </span>
                   <div>
                     <span className="muted small">{date(event.createdAt)}</span>
-                    <h3>{STATUS_LABELS[event.status]}</h3>
+                    <h3>{tr(STATUS_LABELS[event.status])}</h3>
                     <p>{event.note}</p>
                   </div>
                 </div>
@@ -1060,7 +1155,7 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
                 disabled={status.isPending}
                 onClick={() => status.mutate(action.status)}
               >
-                {status.isPending ? "Сохраняем…" : action.label}
+                {status.isPending ? tr("Сохраняем…") : action.label}
                 <Check size={17} />
               </button>
             )}
@@ -1073,10 +1168,10 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
               >
                 <ShieldCheck size={13} />
                 {incident.status === "open"
-                  ? "Арбитр разбирается"
-                  : "Решение принято"}
+                  ? tr("Арбитр разбирается")
+                  : tr("Решение принято")}
               </span>
-              <h2>Проблема с заказом</h2>
+              <h2>{tr("Проблема с заказом")}</h2>
               <p className="preserve-lines">{incident.description}</p>
               {incident.evidence && (
                 <a
@@ -1086,7 +1181,7 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
                   rel="noreferrer"
                 >
                   <FileImage size={17} />
-                  Фото к претензии
+                  {tr("Фото к претензии")}
                   <ExternalLink size={13} />
                 </a>
               )}
@@ -1094,14 +1189,16 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
                 <div className="resolution">
                   <strong>
                     {incident.decision === "refund"
-                      ? "Полный возврат"
+                      ? tr("Полный возврат")
                       : incident.decision === "partial"
-                        ? "Частичный возврат"
-                        : "Жалоба отклонена"}
+                        ? tr("Частичный возврат")
+                        : tr("Жалоба отклонена")}
                   </strong>
                   <p>{incident.resolution}</p>
-                  <span>Сумма возврата: {euro(incident.refundAmount)}</span>
-                  <small>Возврат выполняется сторонами напрямую.</small>
+                  <span>
+                    {tr("Сумма возврата:")} {euro(incident.refundAmount)}
+                  </span>
+                  <small>{tr("Возврат выполняется сторонами напрямую.")}</small>
                 </div>
               )}
               {user.role === "arbiter" && incident.status === "open" && (
@@ -1115,16 +1212,18 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
           )}
           <section className="content-card">
             <div className="card-section-header">
-              <h2>Диалог по заказу</h2>
+              <h2>{tr("Диалог по заказу")}</h2>
               <MessageCircle size={21} className="muted" />
             </div>
             <p className="muted small">
-              Договорённости сохраняются здесь. При споре их увидит арбитр.
+              {tr(
+                "Договорённости сохраняются здесь. При споре их увидит арбитр.",
+              )}
             </p>
             <div
               className="messages"
               role="log"
-              aria-label="Сообщения по заказу"
+              aria-label={tr("Сообщения по заказу")}
             >
               {messages.length ? (
                 messages.map((m) => (
@@ -1140,7 +1239,7 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
               ) : (
                 <div className="conversation-empty">
                   <BrandIllustration kind="conversation" />
-                  <p>Поздоровайтесь и уточните детали.</p>
+                  <p>{tr("Поздоровайтесь и уточните детали.")}</p>
                 </div>
               )}
             </div>
@@ -1152,16 +1251,16 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
               }}
             >
               <input
-                aria-label="Сообщение"
+                aria-label={tr("Сообщение")}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 maxLength={2000}
                 required
-                placeholder="Напишите сообщение…"
+                placeholder={tr("Напишите сообщение…")}
               />
               <button
                 className="button primary"
-                aria-label="Отправить сообщение"
+                aria-label={tr("Отправить сообщение")}
                 disabled={send.isPending || !message.trim()}
               >
                 <Send size={17} />
@@ -1172,19 +1271,21 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
         </div>
         <aside className="sticky-aside">
           <section className="content-card">
-            <span className="section-kicker">СОГЛАСОВАННАЯ СТОИМОСТЬ</span>
+            <span className="section-kicker">
+              {tr("СОГЛАСОВАННАЯ СТОИМОСТЬ")}
+            </span>
             <div className="big-price">{euro(order.price)}</div>
             <div className="payment-note">
               <Handshake size={18} />
-              <span>Наличными при личной встрече</span>
+              <span>{tr("Наличными при личной встрече")}</span>
             </div>
             <div className="price-divider" />
-            <h3>Ваши контакты</h3>
+            <h3>{tr("Ваши контакты")}</h3>
             <div className="contact-block">
               <span className="mini-avatar">{order.providerName[0]}</span>
               <div>
                 <strong>{order.providerName}</strong>
-                <span>Исполнитель</span>
+                <span>{tr("Исполнитель")}</span>
                 <p>{order.providerContact}</p>
               </div>
             </div>
@@ -1192,7 +1293,7 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
               <span className="mini-avatar">{order.customerName[0]}</span>
               <div>
                 <strong>{order.customerName}</strong>
-                <span>Заказчик</span>
+                <span>{tr("Заказчик")}</span>
                 <p>{order.customerContact}</p>
               </div>
             </div>
@@ -1204,16 +1305,16 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
                   onClick={() => setIncidentOpen(true)}
                 >
                   <CircleAlert size={16} />
-                  Проблема с заказом
+                  {tr("Проблема с заказом")}
                 </button>
               )}
             <p className="muted small">
-              Контакты видны только участникам заказа и арбитру.
+              {tr("Контакты видны только участникам заказа и арбитру.")}
             </p>
           </section>
           <div className="aside-care">
             <ShieldCheck size={23} />
-            <p>Если что-то пошло не так, мы поможем разобраться.</p>
+            <p>{tr("Если что-то пошло не так, мы поможем разобраться.")}</p>
           </div>
         </aside>
       </div>
@@ -1224,7 +1325,9 @@ export function OrderPage({ requireLogin }: { requireLogin: () => void }) {
           onSuccess={() => {
             setIncidentOpen(false);
             refresh();
-            toast("Спор открыт. Арбитр и исполнитель получили уведомления.");
+            toast(
+              tr("Спор открыт. Арбитр и исполнитель получили уведомления."),
+            );
           }}
         />
       )}
@@ -1241,16 +1344,18 @@ function IncidentModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const tr = useUiText();
   const mutation = useMutation({
     mutationFn: (body: FormData) =>
       api(`/orders/${orderId}/incident`, { method: "POST", body }),
     onSuccess,
   });
   return (
-    <Modal title="Поможем разобраться" onClose={onClose}>
+    <Modal title={tr("Поможем разобраться")} onClose={onClose}>
       <p className="modal-description">
-        Опишите, что произошло. Исполнитель и арбитр получат уведомление, а
-        заказ перейдёт в статус «Открыт спор».
+        {tr(
+          "Опишите, что произошло. Исполнитель и арбитр получат уведомление, а заказ перейдёт в статус «Открыт спор».",
+        )}
       </p>
       <form
         className="form-stack"
@@ -1259,19 +1364,23 @@ function IncidentModal({
           mutation.mutate(new FormData(e.currentTarget));
         }}
       >
-        <Field label="Что пошло не так">
+        <Field label={tr("Что пошло не так")}>
           <textarea
             name="description"
             required
             minLength={15}
             maxLength={5000}
             rows={5}
-            placeholder="Что ожидали получить, что получили, как хотели бы решить вопрос…"
+            placeholder={tr(
+              "Что ожидали получить, что получили, как хотели бы решить вопрос…",
+            )}
           />
         </Field>
         <Field
-          label="Фото, если есть"
-          hint="JPG, PNG или WebP, до 5 МБ. Видно только участникам и арбитру."
+          label={tr("Фото, если есть")}
+          hint={tr(
+            "JPG, PNG или WebP, до 5 МБ. Видно только участникам и арбитру.",
+          )}
         >
           <input
             name="evidence"
@@ -1281,7 +1390,7 @@ function IncidentModal({
         </Field>
         <FormError message={mutation.error?.message} />
         <button className="button primary full" disabled={mutation.isPending}>
-          {mutation.isPending ? "Отправляем…" : "Открыть спор"}
+          {mutation.isPending ? tr("Отправляем…") : tr("Открыть спор")}
           <ShieldCheck size={17} />
         </button>
       </form>
@@ -1298,6 +1407,7 @@ function ResolveForm({
   price: number;
   onSuccess: () => void;
 }) {
+  const tr = useUiText();
   const [decision, setDecision] = useState("refund");
   const toast = useToast();
   const mutation = useMutation({
@@ -1317,7 +1427,7 @@ function ResolveForm({
       }),
     onSuccess: () => {
       onSuccess();
-      toast("Решение зафиксировано, стороны уведомлены.");
+      toast(tr("Решение зафиксировано, стороны уведомлены."));
     },
   });
   return (
@@ -1328,16 +1438,16 @@ function ResolveForm({
         mutation.mutate(new FormData(e.currentTarget));
       }}
     >
-      <h3>Решение арбитра</h3>
-      <Field label="Результат">
+      <h3>{tr("Решение арбитра")}</h3>
+      <Field label={tr("Результат")}>
         <select value={decision} onChange={(e) => setDecision(e.target.value)}>
-          <option value="refund">Полный возврат</option>
-          <option value="partial">Частичный возврат</option>
-          <option value="rejected">Отклонить жалобу</option>
+          <option value="refund">{tr("Полный возврат")}</option>
+          <option value="partial">{tr("Частичный возврат")}</option>
+          <option value="rejected">{tr("Отклонить жалобу")}</option>
         </select>
       </Field>
       {decision === "partial" && (
-        <Field label="Сумма возврата, €">
+        <Field label={tr("Сумма возврата, €")}>
           <input
             name="refundAmount"
             type="number"
@@ -1348,30 +1458,33 @@ function ResolveForm({
           />
         </Field>
       )}
-      <Field label="Комментарий к решению">
+      <Field label={tr("Комментарий к решению")}>
         <textarea
           name="resolution"
           minLength={15}
           maxLength={3000}
           rows={3}
           required
-          placeholder="На основании чего принято решение и что должны сделать стороны…"
+          placeholder={tr(
+            "На основании чего принято решение и что должны сделать стороны…",
+          )}
         />
       </Field>
-      <Field label="Ответственная сторона">
+      <Field label={tr("Ответственная сторона")}>
         <select name="guilty">
-          <option value="none">Рейтинг не меняется</option>
-          <option value="provider">Исполнитель · рейтинг −0,2</option>
-          <option value="customer">Заказчик · рейтинг −0,2</option>
+          <option value="none">{tr("Рейтинг не меняется")}</option>
+          <option value="provider">{tr("Исполнитель · рейтинг −0,2")}</option>
+          <option value="customer">{tr("Заказчик · рейтинг −0,2")}</option>
         </select>
       </Field>
       <p className="muted small">
-        Решение закрывает спор. Перевод средств стороны выполняют
-        самостоятельно.
+        {tr(
+          "Решение закрывает спор. Перевод средств стороны выполняют самостоятельно.",
+        )}
       </p>
       <FormError message={mutation.error?.message} />
       <button className="button dark" disabled={mutation.isPending}>
-        Зафиксировать решение
+        {tr("Зафиксировать решение")}
         <CheckCheck size={17} />
       </button>
     </form>

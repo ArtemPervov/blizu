@@ -196,17 +196,14 @@ test("the guest assistant streams a reply without leaving the current page", asy
     }
     if (input === "/api/assistant/chat") {
       assert.equal(JSON.parse(String(init?.body)).message, "Где мои заказы?");
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            chatStream = controller;
-            const first = encoder.encode('{"delta":"Откройте "}\n');
-            controller.enqueue(first.slice(0, 11));
-            controller.enqueue(first.slice(11));
-          },
-        }),
-        { headers: { "Content-Type": "application/x-ndjson" } },
-      );
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          chatStream = controller;
+          const first = encoder.encode('{"delta":"Откройте "}\n');
+          controller.enqueue(first.slice(0, 11));
+          controller.enqueue(first.slice(11));
+        },
+      }), { headers: { "Content-Type": "application/x-ndjson" } });
     }
     return baseFetch(input, init);
   };
@@ -222,13 +219,9 @@ test("the guest assistant streams a reply without leaving the current page", asy
   fireEvent.click(screen.getByRole("button", { name: "Отправить" }));
   const transcript = await screen.findByRole("log");
   assert.ok(await within(transcript).findByText("Откройте"));
-  chatStream.enqueue(
-    encoder.encode('{"delta":"раздел «Мои заказы»."}\n{"done":true}\n'),
-  );
+  chatStream.enqueue(encoder.encode('{"delta":"раздел «Мои заказы»."}\n{"done":true}\n'));
   chatStream.close();
-  assert.ok(
-    await within(transcript).findByText("Откройте раздел «Мои заказы»."),
-  );
+  assert.ok(await within(transcript).findByText("Откройте раздел «Мои заказы»."));
   fireEvent.keyDown(dialog, { key: "Escape" });
   assert.equal(screen.queryByRole("dialog", { name: "AI ассистент" }), null);
   fireEvent.click(launcher);
@@ -706,10 +699,7 @@ test("catalog applies bookmarked search, city and budget through the real API", 
     (screen.getByLabelText("Что вы ищете?") as HTMLInputElement).value,
     "Кондиционер",
   );
-  assert.equal(
-    (screen.getByLabelText("Город поиска") as HTMLSelectElement).value,
-    "Бар",
-  );
+  assert.ok(screen.getByRole("button", { name: "Город поиска — Бар" }));
   assert.equal(
     (screen.getByLabelText("Максимальная цена") as HTMLInputElement).value,
     "40",
@@ -758,10 +748,7 @@ test("header city picker supports keyboard navigation, dismissal and catalogue f
     ).getByRole("option", { name: "Будва" }),
   );
   await screen.findByRole("button", { name: "Ваш город: Будва" });
-  assert.equal(
-    (screen.getByLabelText("Город поиска") as HTMLSelectElement).value,
-    "Будва",
-  );
+  assert.ok(screen.getByRole("button", { name: "Город поиска — Будва" }));
 });
 
 test("search history and real price validation help refine or recover a search", async () => {
@@ -812,11 +799,7 @@ test("mobile filters apply category and sort together and keep the selected city
   });
   fireEvent.click(filters);
   const dialog = within(screen.getByRole("dialog", { name: "Фильтры" }));
-  assert.equal(
-    (dialog.getByLabelText("Город", { exact: true }) as HTMLSelectElement)
-      .value,
-    "Бар",
-  );
+  assert.ok(dialog.getByRole("button", { name: "Город поиска — Бар" }));
   assert.equal(
     dialog
       .getByRole("button", { name: "Дом и ремонт" })
@@ -830,10 +813,7 @@ test("mobile filters apply category and sort together and keep the selected city
   fireEvent.click(dialog.getByRole("button", { name: "Показать" }));
   await screen.findByRole("heading", { name: "Товары и магазины", level: 2 });
   assert.equal(filters.getAttribute("aria-expanded"), "false");
-  assert.equal(
-    (screen.getByLabelText("Город поиска") as HTMLSelectElement).value,
-    "Бар",
-  );
+  assert.ok(screen.getByRole("button", { name: "Город поиска — Бар" }));
   fireEvent.click(filters);
   const reopened = within(screen.getByRole("dialog", { name: "Фильтры" }));
   assert.equal(
@@ -858,9 +838,12 @@ test("mobile filter dialog applies real results and changing a city resets pagin
     await agent.get("/api/listings?city=Бар&maxPrice=20.5").expect(200)
   ).body.items;
   mount("/?page=2");
-  fireEvent.change(screen.getByLabelText("Город поиска"), {
-    target: { value: "Бар" },
-  });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Город поиска — Вся Черногория" }),
+  );
+  const cities = within(screen.getByRole("group", { name: "Город поиска" }));
+  fireEvent.click(cities.getByRole("checkbox", { name: "Бар", exact: true }));
+  fireEvent.click(cities.getByRole("button", { name: "Применить фильтры" }));
   await waitFor(() => assert.ok(screen.getAllByRole("article").length > 0));
   fireEvent.click(screen.getByRole("button", { name: /^Фильтры/ }));
   const dialog = within(screen.getByRole("dialog", { name: "Фильтры" }));
@@ -1265,6 +1248,29 @@ test("personal workspace links to the order list and preserves provider-only lis
   assert.ok(
     await screen.findByRole("heading", { level: 1, name: "Мои заказы." }),
   );
+});
+
+test("profile settings can be found in the workspace and save contact details", async () => {
+  await agent.post("/api/auth/demo").send({ role: "provider" }).expect(200);
+  mount("/dashboard");
+  fireEvent.click(
+    await screen.findByRole("link", { name: /^Профиль и контакты Имя/ }),
+  );
+  await screen.findByRole("heading", { name: "Профиль и контакты", level: 1 });
+  const viber = await screen.findByRole("textbox", { name: "Viber" });
+  const save = screen.getByRole("button", { name: "Сохранить профиль" });
+  assert.equal((save as HTMLButtonElement).disabled, true);
+  fireEvent.change(viber, { target: { value: "+382 (67) 123-456" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "Telegram" }), {
+    target: { value: "@master_profile" },
+  });
+  fireEvent.click(screen.getByRole("checkbox", { name: /^Показывать Viber/ }));
+  fireEvent.click(save);
+  await screen.findByText("Профиль сохранён");
+  assert.equal((viber as HTMLInputElement).value, "+38267123456");
+  const { profile } = (await agent.get("/api/profile").expect(200)).body;
+  assert.equal(profile.telegram, "master_profile");
+  assert.equal(profile.showListingContacts, true);
 });
 
 test("signed-in users can return to their workspace from favorites", async () => {

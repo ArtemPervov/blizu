@@ -1,3 +1,4 @@
+import { useUiText } from "./lib";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -126,11 +127,13 @@ const stateLabel: Record<string, string> = {
   action: "Действие",
 };
 function Snapshot({ value }: { value: Record<string, unknown> }) {
+  const tr = useUiText();
   return (
     <span>
       {Object.entries(value)
         .map(
-          ([key, value]) => `${stateLabel[key] || key}: ${booleanLabel(value)}`,
+          ([key, value]) =>
+            `${tr(stateLabel[key] || key)}: ${tr(booleanLabel(value))}`,
         )
         .join(" · ")}
     </span>
@@ -147,6 +150,7 @@ function Badge({
 }
 
 export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
+  const tr = useUiText();
   const { user, loading } = useAuth();
   const [params, setParams] = useSearchParams();
   const tab = (
@@ -225,12 +229,12 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
     return (
       <div className="page-shell refined-page">
         <Empty
-          title="Пространство команды"
-          description="Войдите в учётную запись с разрешением оператора."
+          title={tr("Пространство команды")}
+          description={tr("Войдите в учётную запись с разрешением оператора.")}
         >
           <button className="button primary" onClick={requireLogin}>
             <UserRound size={17} />
-            Войти в аккаунт
+            {tr("Войти в аккаунт")}
           </button>
         </Empty>
       </div>
@@ -239,11 +243,13 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
     return (
       <div className="page-shell refined-page">
         <Empty
-          title="Доступ ограничен"
-          description="Панель доступна сотрудникам, которым выдано разрешение оператора."
+          title={tr("Доступ ограничен")}
+          description={tr(
+            "Панель доступна сотрудникам, которым выдано разрешение оператора.",
+          )}
         >
           <Link className="button secondary" to="/dashboard">
-            В личный кабинет
+            {tr("В личный кабинет")}
             <ArrowRight size={16} />
           </Link>
         </Empty>
@@ -257,77 +263,83 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
   return (
     <div className="page-shell refined-page operator-page">
       <div className="page-breadcrumb">
-        <Link to="/dashboard">Личный кабинет</Link>
+        <Link to="/dashboard">{tr("Личный кабинет")}</Link>
         <span>/</span>
-        <span>Оператор</span>
+        <span>{tr("Оператор")}</span>
       </div>
       <div className="workspace-heading operator-heading">
         <div>
-          <span className="section-kicker">КОМАНДА BLIZU</span>
+          <span className="section-kicker">{tr("КОМАНДА BLIZU")}</span>
           <h1>
-            Всё под <em>вниманием.</em>
+            {tr("Всё под")} <em>{tr("вниманием.")}</em>
           </h1>
-          <p>Панель оператора · пользователи, предложения и обращения.</p>
+          <p>
+            {tr("Панель оператора · пользователи, предложения и обращения.")}
+          </p>
         </div>
         <span className="operator-access-note">
           <ShieldCheck size={19} />
           {user.name}
-          <small>Действия сохраняются в журнале</small>
+          <small>{tr("Действия сохраняются в журнале")}</small>
         </span>
       </div>
-      <div className="operator-metrics" aria-label="Сводка сервиса">
+      <div className="operator-metrics" aria-label={tr("Сводка сервиса")}>
         <button onClick={() => selectTab("reports", "open")}>
           <span>
             <Flag size={17} />
-            Ждут ответа
+            {tr("Ждут ответа")}
           </span>
           <strong>{summary.data?.openReports ?? "—"}</strong>
           <small>
-            Обращения пользователей
+            {tr("Обращения пользователей")}
             <ArrowUpRight size={15} />
           </small>
         </button>
         <button onClick={() => selectTab("users")}>
           <span>
             <Users size={17} />
-            Пользователи
+            {tr("Пользователи")}
           </span>
           <strong>{summary.data?.users ?? "—"}</strong>
           <small>
             {summary.data
-              ? `Заблокировано: ${summary.data.blockedUsers}`
-              : "Загружаем сводку"}
+              ? tr("Заблокировано: {0}", summary.data.blockedUsers)
+              : tr("Загружаем сводку")}
             <ArrowUpRight size={15} />
           </small>
         </button>
         <button onClick={() => selectTab("listings", "published")}>
           <span>
-            <Eye size={17} />В каталоге
+            <Eye size={17} />
+            {tr("В каталоге")}
           </span>
           <strong>{summary.data?.publishedListings ?? "—"}</strong>
           <small>
-            Доступные предложения
+            {tr("Доступные предложения")}
             <ArrowUpRight size={15} />
           </small>
         </button>
         <button onClick={() => selectTab("listings", "hidden")}>
           <span>
             <EyeOff size={17} />
-            Скрыто
+            {tr("Скрыто")}
           </span>
           <strong>{summary.data?.hiddenListings ?? "—"}</strong>
           <small>
-            Решения модерации
+            {tr("Решения модерации")}
             <ArrowUpRight size={15} />
           </small>
         </button>
       </div>
       {summary.error && (
         <p className="form-error" role="alert">
-          Не удалось обновить сводку: {summary.error.message}
+          {tr("Не удалось обновить сводку:")} {summary.error.message}
         </p>
       )}
-      <nav className="workspace-tabs operator-tabs" aria-label="Разделы панели">
+      <nav
+        className="workspace-tabs operator-tabs"
+        aria-label={tr("Разделы панели")}
+      >
         {tabs.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -335,7 +347,7 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
             onClick={() => selectTab(id)}
           >
             <Icon size={16} />
-            {label}
+            {tr(label)}
             {id === "reports" && !!summary.data?.openReports && (
               <span>{summary.data.openReports}</span>
             )}
@@ -345,7 +357,7 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
       <div className="operator-toolbar glass-panel">
         <form
           role="search"
-          aria-label="Поиск в панели"
+          aria-label={tr("Поиск в панели")}
           onSubmit={(event) => {
             event.preventDefault();
             update({ q: search.trim() });
@@ -353,7 +365,7 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
         >
           <Search size={18} />
           <label className="visually-hidden" htmlFor="operator-search">
-            Поиск в панели
+            {tr("Поиск в панели")}
           </label>
           <input
             id="operator-search"
@@ -363,27 +375,27 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
             onChange={(e) => setSearch(e.target.value)}
             placeholder={
               tab === "users"
-                ? "Имя, email или город"
+                ? tr("Имя, email или город")
                 : tab === "audit"
-                  ? "Участник, действие или причина"
-                  : "Название, участник или текст"
+                  ? tr("Участник, действие или причина")
+                  : tr("Название, участник или текст")
             }
           />
           <button className="button secondary" type="submit">
-            Найти
+            {tr("Найти")}
           </button>
         </form>
         {tab !== "audit" && (
           <label>
-            <span className="visually-hidden">Фильтр панели</span>
+            <span className="visually-hidden">{tr("Фильтр панели")}</span>
             <select
-              aria-label="Фильтр панели"
+              aria-label={tr("Фильтр панели")}
               value={state}
               onChange={(e) => update({ state: e.target.value })}
             >
               {states[tab].map(([value, text]) => (
                 <option key={value} value={value}>
-                  {text}
+                  {tr(text)}
                 </option>
               ))}
             </select>
@@ -392,18 +404,18 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
       </div>
       <div className="operator-results">
         <span role="status">
-          {isFetching ? "Обновляем данные…" : `Записей: ${total}`}
+          {isFetching ? tr("Обновляем данные…") : tr("Записей: {0}", total)}
         </span>
         {(q || state !== states[tab][0][0]) && (
           <button onClick={reset}>
-            Сбросить фильтры
+            {tr("Сбросить фильтры")}
             <X size={13} />
           </button>
         )}
       </div>
       <section
         className="operator-content"
-        aria-label={tabs.find((t) => t.id === tab)!.label}
+        aria-label={tr(tabs.find((t) => t.id === tab)!.label)}
         aria-busy={isFetching}
       >
         {isPending ? (
@@ -415,17 +427,19 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
             illustration={tab === "reports" ? "conversation" : "search"}
             title={
               q || state !== states[tab][0][0]
-                ? "По этим условиям ничего нет"
+                ? tr("По этим условиям ничего нет")
                 : tab === "reports"
-                  ? "Пока всё спокойно"
-                  : "Здесь пока нет записей"
+                  ? tr("Пока всё спокойно")
+                  : tr("Здесь пока нет записей")
             }
             description={
               tab === "reports"
-                ? "Новые обращения пользователей появятся в этой очереди."
+                ? tr("Новые обращения пользователей появятся в этой очереди.")
                 : tab === "audit"
-                  ? "Причина и результат каждого действия появятся в журнале."
-                  : "Измените фильтр или поисковый запрос."
+                  ? tr(
+                      "Причина и результат каждого действия появятся в журнале.",
+                    )
+                  : tr("Измените фильтр или поисковый запрос.")
             }
           />
         ) : (
@@ -433,14 +447,14 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
             {tab === "users" && (
               <table className="operator-table" role="table">
                 <caption className="visually-hidden">
-                  Пользователи сервиса
+                  {tr("Пользователи сервиса")}
                 </caption>
                 <thead>
                   <tr>
-                    <th scope="col">Пользователь</th>
-                    <th scope="col">Состояние</th>
-                    <th scope="col">Активность</th>
-                    <th scope="col">Действия</th>
+                    <th scope="col">{tr("Пользователь")}</th>
+                    <th scope="col">{tr("Состояние")}</th>
+                    <th scope="col">{tr("Активность")}</th>
+                    <th scope="col">{tr("Действия")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -448,28 +462,29 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
                     <tr key={item.id}>
                       <td
                         className="operator-main-cell"
-                        data-label="Пользователь"
+                        data-label={tr("Пользователь")}
                       >
                         <strong>{item.name}</strong>
                         <span>{item.email}</span>
                         <small>
-                          {roleLabel[item.role]} · {item.city}
+                          {tr(roleLabel[item.role])} · {item.city}
                         </small>
                         {item.isOperator && (
                           <Badge>
                             <ShieldCheck size={12} />
-                            Оператор
+                            {tr("Оператор")}
                           </Badge>
                         )}
                       </td>
-                      <td data-label="Состояние">
+                      <td data-label={tr("Состояние")}>
                         <div className="operator-badges">
                           <Badge tone={item.blocked ? "attention" : "good"}>
-                            {item.blocked ? "Заблокирован" : "Активен"}
+                            {item.blocked ? tr("Заблокирован") : tr("Активен")}
                           </Badge>
                           {item.verified && (
                             <Badge>
-                              <BadgeCheck size={12} />С отметкой
+                              <BadgeCheck size={12} />
+                              {tr("С отметкой")}
                             </Badge>
                           )}
                         </div>
@@ -477,11 +492,18 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
                           <p className="operator-reason">{item.blockReason}</p>
                         )}
                       </td>
-                      <td data-label="Активность">
-                        <span>Предложений: {item.listingCount}</span>
-                        <small>Заказов: {item.orderCount}</small>
+                      <td data-label={tr("Активность")}>
+                        <span>
+                          {tr("Предложений:")} {item.listingCount}
+                        </span>
+                        <small>
+                          {tr("Заказов:")} {item.orderCount}
+                        </small>
                       </td>
-                      <td className="operator-actions" data-label="Действия">
+                      <td
+                        className="operator-actions"
+                        data-label={tr("Действия")}
+                      >
                         <div>
                           {!item.isOperator && (
                             <button
@@ -496,11 +518,13 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
                               }
                             >
                               {item.blocked
-                                ? "Снять блокировку"
-                                : "Блокировать"}
+                                ? tr("Снять блокировку")
+                                : tr("Блокировать")}
                             </button>
                           )}
-                          {item.role === "provider" && (
+                          {(item.role === "provider" ||
+                            (item.role === "customer" &&
+                              item.listingCount > 0)) && (
                             <button
                               className="button secondary"
                               onClick={() =>
@@ -513,13 +537,13 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
                               }
                             >
                               {item.verified
-                                ? "Снять отметку"
-                                : "Добавить отметку"}
+                                ? tr("Снять отметку")
+                                : tr("Добавить отметку")}
                             </button>
                           )}
                           {item.isOperator && (
                             <span className="muted small">
-                              Доступ управляется на сервере
+                              {tr("Доступ управляется на сервере")}
                             </span>
                           )}
                         </div>
@@ -532,14 +556,14 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
             {tab === "listings" && (
               <table className="operator-table" role="table">
                 <caption className="visually-hidden">
-                  Предложения сервиса
+                  {tr("Предложения сервиса")}
                 </caption>
                 <thead>
                   <tr>
-                    <th scope="col">Предложение</th>
-                    <th scope="col">Автор</th>
-                    <th scope="col">Видимость</th>
-                    <th scope="col">Действия</th>
+                    <th scope="col">{tr("Предложение")}</th>
+                    <th scope="col">{tr("Автор")}</th>
+                    <th scope="col">{tr("Видимость")}</th>
+                    <th scope="col">{tr("Действия")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -547,20 +571,22 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
                     <tr key={item.id}>
                       <td
                         className="operator-main-cell"
-                        data-label="Предложение"
+                        data-label={tr("Предложение")}
                       >
                         <strong>{item.title}</strong>
                         <small>
                           {listingCity(item)} · {listingPrice(item)}
                         </small>
                       </td>
-                      <td data-label="Автор">
+                      <td data-label={tr("Автор")}>
                         <span>{item.providerName}</span>
                       </td>
-                      <td data-label="Видимость">
+                      <td data-label={tr("Видимость")}>
                         <div className="operator-badges">
                           {item.ownerBlocked && (
-                            <Badge tone="attention">Автор заблокирован</Badge>
+                            <Badge tone="attention">
+                              {tr("Автор заблокирован")}
+                            </Badge>
                           )}
                           <Badge
                             tone={
@@ -572,10 +598,10 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
                             }
                           >
                             {item.hidden
-                              ? "Скрыто оператором"
+                              ? tr("Скрыто оператором")
                               : item.ownerBlocked
-                                ? "Недоступно в каталоге"
-                                : "В каталоге"}
+                                ? tr("Недоступно в каталоге")
+                                : tr("В каталоге")}
                           </Badge>
                         </div>
                         {item.moderationReason && (
@@ -584,13 +610,16 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
                           </p>
                         )}
                       </td>
-                      <td className="operator-actions" data-label="Действия">
+                      <td
+                        className="operator-actions"
+                        data-label={tr("Действия")}
+                      >
                         <div>
                           <Link
                             className="button secondary"
                             to={`/listings/${item.id}`}
                           >
-                            Просмотреть
+                            {tr("Просмотреть")}
                             <ArrowUpRight size={14} />
                           </Link>
                           <button
@@ -604,7 +633,7 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
                               })
                             }
                           >
-                            {item.hidden ? "Снять скрытие" : "Скрыть"}
+                            {item.hidden ? tr("Снять скрытие") : tr("Скрыть")}
                           </button>
                         </div>
                       </td>
@@ -616,43 +645,51 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
             {tab === "reports" && (
               <table className="operator-table" role="table">
                 <caption className="visually-hidden">
-                  Обращения пользователей
+                  {tr("Обращения пользователей")}
                 </caption>
                 <thead>
                   <tr>
-                    <th scope="col">Обращение</th>
-                    <th scope="col">Отправитель</th>
-                    <th scope="col">Состояние</th>
-                    <th scope="col">Действия</th>
+                    <th scope="col">{tr("Обращение")}</th>
+                    <th scope="col">{tr("Отправитель")}</th>
+                    <th scope="col">{tr("Состояние")}</th>
+                    <th scope="col">{tr("Действия")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(data.items as OperatorReport[]).map((item) => (
                     <tr key={item.id}>
-                      <td className="operator-main-cell" data-label="Обращение">
-                        <strong>{REPORT_CATEGORIES[item.category]}</strong>
+                      <td
+                        className="operator-main-cell"
+                        data-label={tr("Обращение")}
+                      >
+                        <strong>{tr(REPORT_CATEGORIES[item.category])}</strong>
                         <span>{item.targetLabel}</span>
                         <p className="operator-excerpt">{item.description}</p>
                         <small>{date(item.createdAt)}</small>
                       </td>
-                      <td data-label="Отправитель">{item.reporterName}</td>
-                      <td data-label="Состояние">
+                      <td data-label={tr("Отправитель")}>
+                        {item.reporterName}
+                      </td>
+                      <td data-label={tr("Состояние")}>
                         <Badge
                           tone={
                             item.status === "open" ? "attention" : "neutral"
                           }
                         >
-                          {reportLabel[item.status]}
+                          {tr(reportLabel[item.status])}
                         </Badge>
                       </td>
-                      <td className="operator-actions" data-label="Действия">
+                      <td
+                        className="operator-actions"
+                        data-label={tr("Действия")}
+                      >
                         <button
                           className={`button ${item.status === "open" ? "primary" : "secondary"}`}
                           onClick={() => setReport(item)}
                         >
                           {item.status === "open"
-                            ? "Рассмотреть"
-                            : "Посмотреть решение"}
+                            ? tr("Рассмотреть")
+                            : tr("Посмотреть решение")}
                           <ArrowUpRight size={14} />
                         </button>
                       </td>
@@ -667,34 +704,40 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
                 role="table"
               >
                 <caption className="visually-hidden">
-                  Журнал действий оператора
+                  {tr("Журнал действий оператора")}
                 </caption>
                 <thead>
                   <tr>
-                    <th scope="col">Действие</th>
-                    <th scope="col">Участник</th>
-                    <th scope="col">Причина</th>
-                    <th scope="col">Изменение</th>
+                    <th scope="col">{tr("Действие")}</th>
+                    <th scope="col">{tr("Участник")}</th>
+                    <th scope="col">{tr("Причина")}</th>
+                    <th scope="col">{tr("Изменение")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(data.items as OperatorAudit[]).map((item) => (
                     <tr key={item.id}>
-                      <td className="operator-main-cell" data-label="Действие">
+                      <td
+                        className="operator-main-cell"
+                        data-label={tr("Действие")}
+                      >
                         <strong>
                           {AUDIT_ACTIONS[item.action] || item.action}
                         </strong>
                         <span>{item.targetLabel}</span>
                         <small>{date(item.createdAt)}</small>
                       </td>
-                      <td data-label="Участник">{item.actorName}</td>
-                      <td data-label="Причина">
+                      <td data-label={tr("Участник")}>{item.actorName}</td>
+                      <td data-label={tr("Причина")}>
                         <p className="preserve-lines">{item.reason}</p>
                       </td>
-                      <td className="operator-diff" data-label="Изменение">
-                        <small>До</small>
+                      <td
+                        className="operator-diff"
+                        data-label={tr("Изменение")}
+                      >
+                        <small>{tr("До")}</small>
                         <Snapshot value={item.before} />
-                        <small>После</small>
+                        <small>{tr("После")}</small>
                         <Snapshot value={item.after} />
                       </td>
                     </tr>
@@ -706,14 +749,14 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
         )}
       </section>
       {data && data.total > data.pageSize && (
-        <nav className="operator-pagination" aria-label="Страницы панели">
+        <nav className="operator-pagination" aria-label={tr("Страницы панели")}>
           <button
             className="button secondary"
             disabled={page === 1 || isFetching}
             onClick={() => update({ page: String(page - 1) })}
           >
             <ArrowLeft size={16} />
-            Назад
+            {tr("Назад")}
           </button>
           <span>
             {page} / {Math.ceil(data.total / data.pageSize)}
@@ -723,15 +766,16 @@ export function OperatorPage({ requireLogin }: { requireLogin: () => void }) {
             disabled={page * data.pageSize >= data.total || isFetching}
             onClick={() => update({ page: String(page + 1) })}
           >
-            Дальше
+            {tr("Дальше")}
             <ArrowRight size={16} />
           </button>
         </nav>
       )}
       <p className="operator-footnote">
         <ShieldCheck size={15} />
-        Блокировки и скрытие обратимы. Коммерческие споры рассматриваются
-        арбитром в заказе.
+        {tr(
+          "Блокировки и скрытие обратимы. Коммерческие споры рассматриваются арбитром в заказе.",
+        )}
       </p>
       {change && (
         <ChangeModal change={change} onClose={() => setChange(null)} />
@@ -779,6 +823,7 @@ function ChangeModal({
   change: Change;
   onClose: () => void;
 }) {
+  const tr = useUiText();
   const mutation = useOperatorChange(onClose);
   const [reason, setReason] = useState("");
   function submit(event: FormEvent) {
@@ -790,20 +835,24 @@ function ChangeModal({
   }
   return (
     <Modal
-      title={changeLabels[change.action]}
+      title={tr(changeLabels[change.action])}
       onClose={() => {
         if (!mutation.isPending) onClose();
       }}
     >
       <p className="operator-modal-target">{change.title}</p>
-      <p className="modal-description">{changeDescriptions[change.action]}</p>
+      <p className="modal-description">
+        {tr(changeDescriptions[change.action])}
+      </p>
       <form className="form-stack" onSubmit={submit}>
         <Field
-          label="Причина решения"
-          hint="В журнале сохранятся автор, причина и изменение состояния."
+          label={tr("Причина решения")}
+          hint={tr(
+            "В журнале сохранятся автор, причина и изменение состояния.",
+          )}
         >
           <textarea
-            aria-label="Причина решения"
+            aria-label={tr("Причина решения")}
             required
             minLength={10}
             maxLength={2000}
@@ -821,10 +870,12 @@ function ChangeModal({
             disabled={mutation.isPending}
             onClick={onClose}
           >
-            Отмена
+            {tr("Отмена")}
           </button>
           <button className="button primary" disabled={mutation.isPending}>
-            {mutation.isPending ? "Сохраняем…" : changeLabels[change.action]}
+            {mutation.isPending
+              ? tr("Сохраняем…")
+              : changeLabels[change.action]}
             <Check size={16} />
           </button>
         </div>
@@ -839,26 +890,27 @@ function ReportReview({
   report: OperatorReport;
   onClose: () => void;
 }) {
+  const tr = useUiText();
   const mutation = useOperatorChange(onClose);
   const [status, setStatus] = useState("resolved");
   const [action, setAction] = useState("none");
   const [resolution, setResolution] = useState("");
   return (
     <Modal
-      title="Рассмотрение обращения"
+      title={tr("Рассмотрение обращения")}
       onClose={() => {
         if (!mutation.isPending) onClose();
       }}
     >
       <div className="operator-report-heading">
         <Badge tone={report.status === "open" ? "attention" : "neutral"}>
-          {reportLabel[report.status]}
+          {tr(reportLabel[report.status])}
         </Badge>
         <span>{date(report.createdAt)}</span>
       </div>
       <h3 className="operator-modal-target">{report.targetLabel}</h3>
       <p className="muted small">
-        {REPORT_CATEGORIES[report.category]} · {report.reporterName}
+        {tr(REPORT_CATEGORIES[report.category])} · {report.reporterName}
       </p>
       <p className="operator-report-text">{report.description}</p>
       <Link
@@ -870,12 +922,12 @@ function ReportReview({
         }
         onClick={onClose}
       >
-        Просмотреть объект обращения
+        {tr("Просмотреть объект обращения")}
         <ArrowUpRight size={15} />
       </Link>
       {report.status !== "open" ? (
         <div className="operator-resolution">
-          <strong>Решение</strong>
+          <strong>{tr("Решение")}</strong>
           <p>{report.resolution}</p>
           <small>
             {report.resolvedByName} · {date(report.updatedAt)}
@@ -892,7 +944,7 @@ function ReportReview({
             });
           }}
         >
-          <Field label="Результат">
+          <Field label={tr("Результат")}>
             <select
               value={status}
               onChange={(e) => {
@@ -900,30 +952,30 @@ function ReportReview({
                 setAction("none");
               }}
             >
-              <option value="resolved">Рассмотрено</option>
-              <option value="dismissed">Отклонено</option>
+              <option value="resolved">{tr("Рассмотрено")}</option>
+              <option value="dismissed">{tr("Отклонено")}</option>
             </select>
           </Field>
-          <Field label="Действие над объектом">
+          <Field label={tr("Действие над объектом")}>
             <select
               value={action}
               onChange={(e) => setAction(e.target.value)}
               disabled={status === "dismissed"}
             >
-              <option value="none">Оставить текущее состояние</option>
+              <option value="none">{tr("Оставить текущее состояние")}</option>
               {report.targetType === "listing" ? (
-                <option value="hide">Скрыть предложение</option>
+                <option value="hide">{tr("Скрыть предложение")}</option>
               ) : (
-                <option value="block">Заблокировать аккаунт</option>
+                <option value="block">{tr("Заблокировать аккаунт")}</option>
               )}
             </select>
           </Field>
           <Field
-            label="Решение и основание"
-            hint="Этот текст получит отправитель обращения."
+            label={tr("Решение и основание")}
+            hint={tr("Этот текст получит отправитель обращения.")}
           >
             <textarea
-              aria-label="Решение и основание"
+              aria-label={tr("Решение и основание")}
               required
               minLength={10}
               maxLength={2000}
@@ -934,7 +986,7 @@ function ReportReview({
           </Field>
           <FormError message={mutation.error?.message} />
           <button className="button primary full" disabled={mutation.isPending}>
-            {mutation.isPending ? "Сохраняем…" : "Сохранить решение"}
+            {mutation.isPending ? tr("Сохраняем…") : tr("Сохранить решение")}
             <Check size={16} />
           </button>
         </form>

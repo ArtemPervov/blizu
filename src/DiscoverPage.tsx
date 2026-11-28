@@ -1,3 +1,4 @@
+import { useUiText } from "./lib";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -27,12 +28,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import {
-  CATEGORIES,
-  CITIES,
-  type Listing,
-  type ServiceRequest,
-} from "../shared/types";
+import { CATEGORIES, type Listing, type ServiceRequest } from "../shared/types";
 import { api, euro, plural, useI18n } from "./lib";
 import { useMarket } from "./market-state";
 import { Brand, Empty, ErrorState, ListingCard, Modal } from "./components/ui";
@@ -40,8 +36,16 @@ import type { CreateAction } from "./App";
 import { useAvailableListings } from "./available-listings";
 import { AdriaticLight } from "./components/AdriaticLight";
 import { MobileSearchPrompt } from "./components/MobileSearchPrompt";
+import { SearchCityPicker } from "./components/SearchCityPicker";
+import { LanguagePicker, ThemeToggle } from "./components/AppearanceControls";
 import { listingCity, listingPrice } from "./listing-format";
-import { categoryName, cityName, orderHelpPath } from "./market-copy";
+import {
+  allMontenegro,
+  catalogCities,
+  categoryName,
+  cityName,
+  orderHelpPath,
+} from "./market-copy";
 
 const icons = {
   all: Grid2X2,
@@ -108,13 +112,9 @@ function scrollResults() {
 }
 
 export function DiscoverPage({
-  city,
-  setCity,
   create,
   meta,
 }: {
-  city: string;
-  setCity: (value: string) => void;
   create: CreateAction;
   meta?: {
     demo: boolean;
@@ -127,9 +127,16 @@ export function DiscoverPage({
     };
   };
 }) {
+  const tr = useUiText();
   const { language, t } = useI18n();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
+  const cities = catalogCities(params);
+  const selectedCities = cities.join(",");
+  const city = cities.length === 1 ? cities[0] : allMontenegro;
+  const citySummary = cities.length
+    ? cities.map((item) => cityName(item, language)).join(", ")
+    : t.everywhere;
   const q = (params.get("q") || "").slice(0, 200);
   const telegramOnly = params.get("source") === "telegram";
   const demoOnly = !!meta?.demo && params.get("source") === "demo";
@@ -165,7 +172,7 @@ export function DiscoverPage({
     [priceError, setPriceError] = useState("");
   const [mobileFilters, setMobileFilters] = useState<{
     category: string;
-    city: string;
+    cities: string[];
     rated: boolean;
     verified: boolean;
     sort: string;
@@ -196,7 +203,7 @@ export function DiscoverPage({
   const query = new URLSearchParams({
     q,
     category,
-    city,
+    ...(selectedCities ? { cities: selectedCities } : {}),
     sort,
     ...(filteredSource ? { source: filteredSource } : {}),
     limit: String(pageSize),
@@ -208,15 +215,17 @@ export function DiscoverPage({
   });
   const { data, isPending, isFetching, error, refetch } = useQuery({
     queryKey: ["listings", query.toString()],
-    queryFn: () =>
-      api<{ items: Listing[]; total: number }>(`/listings?${query}`),
+    queryFn: ({ signal }) =>
+      api<{ items: Listing[]; total: number }>(`/listings?${query}`, {
+        signal,
+      }),
     placeholderData: keepPreviousData,
   });
   const requests = useQuery({
-    queryKey: ["discovery-requests", city],
+    queryKey: ["discovery-requests", selectedCities],
     queryFn: () =>
       api<{ items: ServiceRequest[] }>(
-        `/requests?${new URLSearchParams({ city })}`,
+        `/requests?${new URLSearchParams({ cities: selectedCities })}`,
       ),
   });
   const update = (values: Record<string, string>) =>
@@ -261,7 +270,7 @@ export function DiscoverPage({
       maxDraft !== "" &&
       Number(minDraft) > Number(maxDraft)
     ) {
-      setPriceError("Цена «от» не должна быть больше цены «до».");
+      setPriceError(tr("Цена «от» не должна быть больше цены «до»."));
       return;
     }
     setPriceError("");
@@ -270,7 +279,8 @@ export function DiscoverPage({
       maxPrice: maxDraft,
       ...(mobileFilters && {
         category: mobileFilters.category,
-        city: mobileFilters.city === "Вся Черногория" ? "" : mobileFilters.city,
+        city: "",
+        cities: mobileFilters.cities.join(","),
         minRating: mobileFilters.rated ? "4.5" : "",
         verified: mobileFilters.verified ? "1" : "",
         sort: mobileFilters.sort === "recommended" ? "" : mobileFilters.sort,
@@ -308,27 +318,37 @@ export function DiscoverPage({
           },
         ]
       : []),
-    ...(city !== "Вся Черногория"
-      ? [
-          {
-            label: cityName(city, language),
-            clear: () => setCity("Вся Черногория"),
-          },
-        ]
-      : []),
+    ...cities.map((item) => ({
+      label: cityName(item, language),
+      clear: () =>
+        update({
+          city: "",
+          cities: cities.filter((value) => value !== item).join(","),
+        }),
+    })),
     ...(min || max
       ? [
           {
-            label: `${min ? `от ${min}` : ""}${min && max ? " " : ""}${max ? `до ${max}` : ""} €`,
+            label: `${min ? tr("от {0}", min) : ""}${min && max ? " " : ""}${max ? tr("до {0}", max) : ""} €`,
             clear: () => update({ minPrice: "", maxPrice: "" }),
           },
         ]
       : []),
     ...(verified
-      ? [{ label: "С отметкой профиля", clear: () => update({ verified: "" }) }]
+      ? [
+          {
+            label: tr("С отметкой профиля"),
+            clear: () => update({ verified: "" }),
+          },
+        ]
       : []),
     ...(rated
-      ? [{ label: "Рейтинг от 4,5", clear: () => update({ minRating: "" }) }]
+      ? [
+          {
+            label: tr("Рейтинг от 4,5"),
+            clear: () => update({ minRating: "" }),
+          },
+        ]
       : []),
   ];
   const filterCount =
@@ -368,7 +388,7 @@ export function DiscoverPage({
   const filterPanel = (draft: typeof mobileFilters = null) => (
     <div className="filter-panel">
       <div className="filter-panel-title">
-        <h3>Точнее под вашу задачу</h3>
+        <h3>{tr("Точнее под вашу задачу")}</h3>
         <SlidersHorizontal size={17} />
       </div>
       <form onSubmit={applyPrice}>
@@ -382,36 +402,24 @@ export function DiscoverPage({
                 )}
               </div>
             </fieldset>
-            <div className="mobile-filter-selects">
-              <label>
-                <span>{t.filterCity}</span>
-                <select
-                  value={draft.city}
-                  onChange={(e) =>
-                    setMobileFilters({ ...draft, city: e.target.value })
-                  }
-                >
-                  {CITIES.map((item) => (
-                    <option key={item} value={item}>
-                      {cityName(item, language)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            <SearchCityPicker
+              className="mobile-filter-city"
+              value={draft.cities}
+              onChange={(cities) => setMobileFilters({ ...draft, cities })}
+            />
           </>
         )}
-        <fieldset aria-label="Стоимость в евро">
+        <fieldset aria-label={tr("Стоимость в евро")}>
           <legend>{t.cost}</legend>
           <div className="price-fields">
             <label>
-              <span className="price-field-label">От</span>
+              <span className="price-field-label">{tr("От")}</span>
               <span className="price-field-control">
                 <input
                   type="number"
                   inputMode="decimal"
                   step="any"
-                  aria-label="Минимальная цена"
+                  aria-label={tr("Минимальная цена")}
                   aria-invalid={!!priceError}
                   min={0}
                   max={1000000}
@@ -426,13 +434,13 @@ export function DiscoverPage({
               </span>
             </label>
             <label>
-              <span className="price-field-label">До</span>
+              <span className="price-field-label">{tr("До")}</span>
               <span className="price-field-control">
                 <input
                   type="number"
                   inputMode="decimal"
                   step="any"
-                  aria-label="Максимальная цена"
+                  aria-label={tr("Максимальная цена")}
                   aria-invalid={!!priceError}
                   min={0}
                   max={1000000}
@@ -447,7 +455,9 @@ export function DiscoverPage({
               </span>
             </label>
           </div>
-          <p className="filter-hint">Укажите одну границу цены или обе.</p>
+          <p className="filter-hint">
+            {tr("Укажите одну границу цены или обе.")}
+          </p>
           {priceError && (
             <p className="form-error" role="alert">
               {priceError}
@@ -455,7 +465,7 @@ export function DiscoverPage({
           )}
         </fieldset>
         <fieldset>
-          <legend>Больше уверенности</legend>
+          <legend>{tr("Больше уверенности")}</legend>
           <label className="filter-check">
             <input
               type="checkbox"
@@ -468,7 +478,7 @@ export function DiscoverPage({
             />
             <span>
               <Star size={16} />
-              Рейтинг от 4,5
+              {tr("Рейтинг от 4,5")}
             </span>
           </label>
           <label className="filter-check">
@@ -485,7 +495,8 @@ export function DiscoverPage({
               }
             />
             <span>
-              <BadgeCheck size={17} />С отметкой профиля
+              <BadgeCheck size={17} />
+              {tr("С отметкой профиля")}
             </span>
           </label>
         </fieldset>
@@ -536,7 +547,7 @@ export function DiscoverPage({
                 setPriceError("");
                 setMobileFilters({
                   category: "all",
-                  city: "Вся Черногория",
+                  cities: [],
                   rated: false,
                   verified: false,
                   sort: "recommended",
@@ -564,15 +575,15 @@ export function DiscoverPage({
             setMobileFilters(null);
           }}
         >
-          Сбросить всё
+          {tr("Сбросить всё")}
         </button>
       )}
       <div className="filter-help">
         <span className="filter-help-icon">
           <MessageCircle size={22} />
         </span>
-        <h3>Проще рассказать?</h3>
-        <p>Опишите задачу. Исполнители сами предложат цену и время.</p>
+        <h3>{tr("Проще рассказать?")}</h3>
+        <p>{tr("Опишите задачу. Исполнители сами предложат цену и время.")}</p>
         <button
           onClick={() => {
             setMobileFilters(null);
@@ -582,7 +593,7 @@ export function DiscoverPage({
             });
           }}
         >
-          Создать заявку
+          {tr("Создать заявку")}
           <ArrowUpRight size={17} />
         </button>
       </div>
@@ -603,6 +614,10 @@ export function DiscoverPage({
           <p>{t.catalogIntro}</p>
           <div className="mobile-discovery-brand">
             <Brand />
+            <div className="mobile-appearance">
+              <LanguagePicker />
+              <ThemeToggle />
+            </div>
           </div>
           <form
             className="discovery-search glass-panel"
@@ -633,41 +648,20 @@ export function DiscoverPage({
                 maxLength={200}
                 placeholder={t.searchPlaceholder}
                 enterKeyHint="search"
-                list="search-ideas"
                 autoComplete="off"
               />
               <MobileSearchPrompt
                 active={!search && !searchFocused && !mobileFilters}
                 language={language}
               />
-              <datalist id="search-ideas">
-                {[
-                  ...new Set([
-                    ...history,
-                    "Кондиционер",
-                    "Домашняя еда",
-                    "Бухгалтер",
-                    "Массаж",
-                  ]),
-                ].map((term) => (
-                  <option key={term} value={term} />
-                ))}
-              </datalist>
             </label>
-            <label className="discovery-city">
-              <MapPin size={16} />
-              <span className="visually-hidden">{t.searchCity}</span>
-              <select
-                value={city}
-                onChange={(event) => setCity(event.target.value)}
-              >
-                {CITIES.map((item) => (
-                  <option key={item} value={item}>
-                    {cityName(item, language)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <SearchCityPicker
+              className="discovery-city"
+              value={cities}
+              onChange={(value) =>
+                update({ city: "", cities: value.join(",") })
+              }
+            />
             <button
               className="discovery-search-submit"
               type="submit"
@@ -699,7 +693,7 @@ export function DiscoverPage({
                 setPriceError("");
                 setMobileFilters({
                   category,
-                  city,
+                  cities,
                   rated,
                   verified,
                   sort,
@@ -716,15 +710,15 @@ export function DiscoverPage({
               {history.length ? (
                 <>
                   <Clock3 size={13} />
-                  Недавнее:
+                  {tr("Недавнее:")}
                 </>
               ) : (
-                "Например:"
+                tr("Например:")
               )}
             </span>
             {(history.length
               ? history.slice(0, 3)
-              : ["Уборка", "Домашняя еда", "Кондиционер"]
+              : [tr("Уборка"), tr("Домашняя еда"), tr("Кондиционер")]
             ).map((term) => (
               <button key={term} onClick={() => find(term)}>
                 {term}
@@ -733,7 +727,7 @@ export function DiscoverPage({
             {history.length > 0 && (
               <button
                 className="clear-history"
-                aria-label="Очистить историю поиска"
+                aria-label={tr("Очистить историю поиска")}
                 onClick={() => {
                   setHistory([]);
                   try {
@@ -786,7 +780,9 @@ export function DiscoverPage({
       <section className="discovery-catalog" id="catalog">
         <div className="discovery-section-heading">
           <div>
-            <span className="section-kicker">ПОЛЕЗНОЕ НА КАЖДЫЙ ДЕНЬ</span>
+            <span className="section-kicker">
+              {tr("ПОЛЕЗНОЕ НА КАЖДЫЙ ДЕНЬ")}
+            </span>
             <h2>
               {q
                 ? t.searchResults
@@ -797,10 +793,12 @@ export function DiscoverPage({
             <p aria-live="polite">
               {isFetching
                 ? t.refreshingListings
-                : `${t.listingsCount(data?.total ?? 0)} · ${cityName(city, language)}`}
+                : `${t.listingsCount(data?.total ?? 0)} · ${citySummary}`}
               {meta?.demo && (
                 <span className="demo-tag">
-                  {meta.stats.imported ? "Локальная версия" : "Демо-каталог"}
+                  {meta.stats.imported
+                    ? tr("Локальная версия")
+                    : tr("Демо-каталог")}
                 </span>
               )}
             </p>
@@ -814,7 +812,7 @@ export function DiscoverPage({
           <div
             className="catalog-source-switch"
             role="group"
-            aria-label="Источник предложений"
+            aria-label={tr("Источник предложений")}
           >
             <button
               type="button"
@@ -845,13 +843,16 @@ export function DiscoverPage({
           </div>
         )}
         <div className="catalog-layout">
-          <aside className="catalog-sidebar" aria-label="Фильтры каталога">
+          <aside
+            className="catalog-sidebar"
+            aria-label={tr("Фильтры каталога")}
+          >
             {filterPanel()}
           </aside>
           <div className="catalog-results" aria-busy={isFetching}>
             <div className="catalog-toolbar">
               <label className="catalog-sort">
-                <span>Показывать</span>
+                <span>{tr("Показывать")}</span>
                 <select
                   aria-label={t.sortListings}
                   value={sort}
@@ -867,12 +868,12 @@ export function DiscoverPage({
               <div
                 className="view-switch"
                 role="group"
-                aria-label="Вид каталога"
+                aria-label={tr("Вид каталога")}
               >
                 {["grid", "list"].map((mode) => (
                   <button
                     key={mode}
-                    aria-label={mode === "grid" ? "Плитка" : "Список"}
+                    aria-label={mode === "grid" ? tr("Плитка") : tr("Список")}
                     aria-pressed={view === mode}
                     onClick={() => {
                       setView(mode);
@@ -896,7 +897,7 @@ export function DiscoverPage({
                   <button
                     key={chip.label}
                     onClick={chip.clear}
-                    aria-label={`Убрать фильтр: ${chip.label}`}
+                    aria-label={tr("Убрать фильтр: {0}", chip.label)}
                   >
                     {chip.label}
                     <X size={13} />
@@ -921,10 +922,11 @@ export function DiscoverPage({
               <div
                 className={`market-grid ${view === "list" ? "market-list" : ""}`}
               >
-                {data.items.map((item) => (
+                {data.items.map((item, index) => (
                   <ListingCard
                     key={item.id}
                     listing={item}
+                    leadPhoto={index === 0}
                     compared={market.compared.some(
                       (other) => other.id === item.id,
                     )}
@@ -934,12 +936,14 @@ export function DiscoverPage({
               </div>
             ) : (
               <Empty
-                title="Кажется, здесь пока тихо"
-                description="Попробуйте другой запрос, расширьте бюджет или расскажите о задаче — подходящие люди смогут откликнуться."
+                title={tr("Кажется, здесь пока тихо")}
+                description={tr(
+                  "Попробуйте другой запрос, расширьте бюджет или расскажите о задаче — подходящие люди смогут откликнуться.",
+                )}
               >
                 <div className="empty-actions">
                   <button className="button secondary" onClick={reset}>
-                    Сбросить фильтры
+                    {tr("Сбросить фильтры")}
                   </button>
                   <button
                     className="button primary"
@@ -950,7 +954,7 @@ export function DiscoverPage({
                       })
                     }
                   >
-                    Создать заявку
+                    {tr("Создать заявку")}
                     <ArrowRight size={16} />
                   </button>
                 </div>
@@ -959,7 +963,7 @@ export function DiscoverPage({
             {data && data.total > pageSize && (
               <nav
                 className="catalog-pagination"
-                aria-label="Страницы каталога"
+                aria-label={tr("Страницы каталога")}
               >
                 <button
                   className="button secondary"
@@ -970,7 +974,7 @@ export function DiscoverPage({
                   }}
                 >
                   <ChevronLeft size={17} />
-                  Назад
+                  {tr("Назад")}
                 </button>
                 <span>
                   {page} / {Math.ceil(data.total / pageSize)}
@@ -983,7 +987,7 @@ export function DiscoverPage({
                     scrollResults();
                   }}
                 >
-                  Дальше
+                  {tr("Дальше")}
                   <ChevronRight size={17} />
                 </button>
               </nav>
@@ -994,13 +998,13 @@ export function DiscoverPage({
       <section className="discovery-request-banner">
         <div>
           <span className="section-kicker">
-            НЕ НУЖНО РАЗБИРАТЬСЯ ВО ВСЁМ САМОМУ
+            {tr("НЕ НУЖНО РАЗБИРАТЬСЯ ВО ВСЁМ САМОМУ")}
           </span>
-          <h2>Нужна помощь с вашей задачей?</h2>
-          <p>Расскажите о ней. Исполнители предложат свои условия.</p>
+          <h2>{tr("Нужна помощь с вашей задачей?")}</h2>
+          <p>{tr("Расскажите о ней. Исполнители предложат свои условия.")}</p>
         </div>
         <button className="button primary" onClick={() => create("request")}>
-          Рассказать о задаче
+          {tr("Рассказать о задаче")}
           <ArrowUpRight size={18} />
         </button>
       </section>
@@ -1009,9 +1013,9 @@ export function DiscoverPage({
           <div className="discovery-section-heading">
             <div>
               <span className="section-kicker">
-                ПРОДОЛЖИТЕ, ГДЕ ОСТАНОВИЛИСЬ
+                {tr("ПРОДОЛЖИТЕ, ГДЕ ОСТАНОВИЛИСЬ")}
               </span>
-              <h2>Вы недавно смотрели</h2>
+              <h2>{tr("Вы недавно смотрели")}</h2>
             </div>
           </div>
           <div className="recent-grid">
@@ -1035,12 +1039,12 @@ export function DiscoverPage({
           <div className="discovery-section-heading">
             <div>
               <span className="section-kicker">
-                КОМУ-ТО ПРИГОДИТСЯ ВАШ ТАЛАНТ
+                {tr("КОМУ-ТО ПРИГОДИТСЯ ВАШ ТАЛАНТ")}
               </span>
-              <h2>Рядом нужна помощь</h2>
+              <h2>{tr("Рядом нужна помощь")}</h2>
             </div>
             <Link className="quiet-link" to="/requests">
-              Все заявки
+              {tr("Все заявки")}
               <ArrowUpRight size={16} />
             </Link>
           </div>
@@ -1053,18 +1057,18 @@ export function DiscoverPage({
                   <span>
                     <MapPin size={13} />
                     {item.city}
-                    <i>Открыта</i>
+                    <i>{tr("Открыта")}</i>
                   </span>
                   <h3>{item.title}</h3>
                   <p>{item.description}</p>
                   <footer>
                     <strong>
                       {item.budget
-                        ? `до ${euro(item.budget)}`
-                        : "По договорённости"}
+                        ? tr("до {0}", euro(item.budget))
+                        : tr("По договорённости")}
                     </strong>
                     <span>
-                      {item.offerCount} откликов
+                      {item.offerCount} {tr("откликов")}
                       <ArrowUpRight size={16} />
                     </span>
                   </footer>
@@ -1076,36 +1080,42 @@ export function DiscoverPage({
       <section className="discovery-how" id="how-it-works">
         <div>
           <span className="section-kicker">
-            ПРОСТО. ПОНЯТНО. ПО-ЧЕЛОВЕЧЕСКИ.
+            {tr("ПРОСТО. ПОНЯТНО. ПО-ЧЕЛОВЕЧЕСКИ.")}
           </span>
           <h2>
-            Меньше забот.
+            {tr("Меньше забот.")}
             <br />
-            <span>Больше жизни.</span>
+            <span>{tr("Больше жизни.")}</span>
           </h2>
           <Link
             className="quiet-link"
             to={deliveryEnabled ? "/delivery" : orderHelpPath}
           >
-            {deliveryEnabled ? "А если нужна доставка?" : t.orderHelp}
+            {deliveryEnabled ? tr("А если нужна доставка?") : t.orderHelp}
             <ArrowUpRight size={16} />
           </Link>
         </div>
         {[
           {
             icon: Search,
-            title: "Найдите или расскажите",
-            text: "Выберите услугу в каталоге или создайте заявку с вашей задачей.",
+            title: tr("Найдите или расскажите"),
+            text: tr(
+              "Выберите услугу в каталоге или создайте заявку с вашей задачей.",
+            ),
           },
           {
             icon: MessageCircle,
-            title: "Согласуйте детали",
-            text: "Сравните отклики. Выберите исполнителя и зафиксируйте цену до начала работ.",
+            title: tr("Согласуйте детали"),
+            text: tr(
+              "Сравните отклики. Выберите исполнителя и зафиксируйте цену до начала работ.",
+            ),
           },
           {
             icon: ShieldCheck,
-            title: "Сохраняйте спокойствие",
-            text: "Переписка и статусы остаются в заказе. Если возник спор, можно обратиться к арбитру.",
+            title: tr("Сохраняйте спокойствие"),
+            text: tr(
+              "Переписка и статусы остаются в заказе. Если возник спор, можно обратиться к арбитру.",
+            ),
           },
         ].map((item, i) => (
           <div className="discovery-step" key={item.title}>

@@ -72,6 +72,8 @@ export const CATEGORIES = [
   },
 ] as const;
 export type Role = "customer" | "provider" | "arbiter";
+export const isMarketplaceUser = (role?: Role) =>
+  role === "customer" || role === "provider";
 export type User = {
   id: string;
   name: string;
@@ -82,6 +84,12 @@ export type User = {
   rating: number;
   verified: boolean;
   isOperator: boolean;
+};
+export type AccountProfile = Pick<User, "name" | "city" | "contact"> & {
+  bio: string;
+  telegram: string;
+  viber: string;
+  showListingContacts: boolean;
 };
 export type Listing = {
   id: string;
@@ -97,6 +105,7 @@ export type Listing = {
   providerName: string;
   providerRating: number;
   providerVerified: boolean;
+  providerBio?: string;
   reviewCount: number;
   createdAt: string;
   hidden?: boolean;
@@ -213,6 +222,20 @@ export type Notification = {
   text: string;
   href: string;
   read: boolean;
+  createdAt: string;
+};
+export type ListingConversation = {
+  id: string;
+  listingId: string;
+  listingTitle: string;
+  participantName: string;
+  updatedAt: string;
+};
+export type ListingMessage = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  text: string;
   createdAt: string;
 };
 export type OrderDetail = {

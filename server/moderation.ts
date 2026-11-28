@@ -90,7 +90,11 @@ export function moderateUser(
       { blocked: next },
     );
   } else {
-    if (user.role !== "provider")
+    if (
+      user.role !== "provider" &&
+      (user.role !== "customer" ||
+        !store.get("SELECT id FROM listings WHERE providerId=? LIMIT 1", id))
+    )
       throw new HttpError(
         400,
         "Отметка доступна только профилям исполнителей.",

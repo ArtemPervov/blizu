@@ -739,38 +739,9 @@
   font-size: 12px;
   max-width: 100%;
 }
-.profile-details > .tiny-label {
-  font-size: 12px;
-  letter-spacing: 1.3px;
-  margin-bottom: 3px;
-}
-.profile-details > .profile-contact {
-  display: block;
-  overflow-wrap: anywhere;
-  line-height: 1.7;
-}
 .profile-details > .profile-rating {
   margin-top: 4px;
   color: var(--accent);
-}
-.workspace-sidebar-note {
-  padding: 27px 10px 0;
-}
-.sidebar-note-line {
-  display: block;
-  width: 23px;
-  height: 1px;
-  background: #a1b5a9;
-}
-.workspace-sidebar-note p {
-  font-family: var(--serif);
-  font-size: 22px;
-  line-height: 1.4;
-  margin: 15px 0 9px;
-}
-.workspace-sidebar-note > span:last-child {
-  font-size: 12px;
-  color: var(--muted);
 }
 .workspace-content {
   min-width: 0;
@@ -1258,9 +1229,6 @@
 .quote-url > div:focus-within {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-.profile-details-toggle {
-  display: none;
 }
 .workspace-page .state-message {
   border-radius: 15px;
@@ -1847,30 +1815,8 @@
   .workspace-nav > a > svg:last-child {
     display: none;
   }
-  .profile-details,
-  .workspace-sidebar-note {
+  .profile-details {
     display: none;
-  }
-  .profile-details.is-expanded {
-    display: flex;
-    margin: 3px 7px 0;
-    padding-top: 14px;
-  }
-  .profile-details-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    min-height: 40px;
-    width: 100%;
-    background: none;
-    border: 0;
-    color: var(--muted);
-    font-size: 12px;
-    margin-top: 3px;
-  }
-  .profile-details-toggle[aria-expanded="true"] > svg {
-    transform: rotate(180deg);
   }
   .workspace-layout::before {
     width: 100%;
@@ -3014,10 +2960,6 @@ body:has(.compare-tray) .toast {
   .profile-role {
     font-size: 12px;
   }
-  .profile-details-toggle {
-    font-size: 12px;
-    min-height: 44px;
-  }
   .workspace-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -3256,14 +3198,12 @@ body:has(.compare-tray) .toast {
       opacity var(--motion-fast),
       visibility 0s;
   }
-  .accordion-item h3 > button > svg,
-  .profile-details-toggle > svg {
+  .accordion-item h3 > button > svg {
     transition: transform var(--motion-fast) var(--motion-ease);
   }
   .workspace-collection,
   .dropdown,
   .mobile-nav,
-  .profile-details.is-expanded,
   .orders-filter-options.is-open {
     animation: panel-reveal var(--motion-fast) var(--motion-ease) both;
   }

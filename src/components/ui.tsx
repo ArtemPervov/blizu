@@ -1,3 +1,4 @@
+import { useUiText } from "../lib";
 import {
   lazy,
   Suspense,
@@ -26,7 +27,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import type { Listing } from "../../shared/types";
-import { euro, useI18n } from "../lib";
+import { date, euro, useI18n } from "../lib";
 const ParticleScene = lazy(() => import("./Particles"));
 import { BrandIllustration, type IllustrationKind } from "./BrandIllustration";
 import { listingAuthor, listingCity } from "../listing-format";
@@ -35,8 +36,9 @@ import { useListingFavorite } from "../listing-favorite";
 import { ListingPhoto, listingPhotos } from "./ListingPhoto";
 
 export function Brand() {
+  const tr = useUiText();
   return (
-    <Link className="brand" to="/" aria-label="blizu — на главную">
+    <Link className="brand" to="/" aria-label={tr("blizu — на главную")}>
       <svg width="31" height="31" viewBox="0 0 32 32" aria-hidden="true">
         <path
           d="M16 3v26M4.75 9.5l22.5 13M4.75 22.5l22.5-13"
@@ -50,10 +52,11 @@ export function Brand() {
   );
 }
 export function Loading() {
+  const tr = useUiText();
   return (
     <div className="state-message" role="status">
       <LoaderCircle className="spin" size={26} />
-      <p>Загружаем…</p>
+      <p>{tr("Загружаем…")}</p>
     </div>
   );
 }
@@ -64,14 +67,15 @@ export function ErrorState({
   error: Error | null;
   retry?: () => void;
 }) {
+  const tr = useUiText();
   return (
     <div className="state-message" role="alert">
       <CircleAlert size={28} />
-      <h3>Не удалось загрузить данные</h3>
-      <p>{error?.message}</p>
+      <h3>{tr("Не удалось загрузить данные")}</h3>
+      <p>{error?.message && tr(error.message)}</p>
       {retry && (
         <button className="button secondary" onClick={retry}>
-          Попробовать снова
+          {tr("Попробовать снова")}
         </button>
       )}
     </div>
@@ -110,6 +114,7 @@ export function Modal({
   className?: string;
   onKeyDown?: KeyboardEventHandler<HTMLDialogElement>;
 }) {
+  const tr = useUiText();
   const titleId = useId();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -141,7 +146,7 @@ export function Modal({
           <h2 id={titleId}>{title}</h2>
           <button
             className="icon-button"
-            aria-label="Закрыть"
+            aria-label={tr("Закрыть")}
             onClick={onClose}
           >
             <X size={21} />
@@ -157,12 +162,15 @@ export function ListingCard({
   immersive = false,
   onCompare,
   compared = false,
+  leadPhoto = false,
 }: {
   listing: Listing;
   immersive?: boolean;
   onCompare?: () => void;
   compared?: boolean;
+  leadPhoto?: boolean;
 }) {
+  const tr = useUiText();
   const location = useLocation();
   const card = useRef<HTMLElement>(null);
   const listingPath = `/listings/${listing.id}`;
@@ -221,7 +229,13 @@ export function ListingCard({
           tabIndex={-1}
           aria-hidden="true"
         >
-          <ListingPhoto src={image} alt="" />
+          <ListingPhoto
+            src={image}
+            alt=""
+            preview
+            loading={leadPhoto ? "eager" : "lazy"}
+            fetchPriority={leadPhoto && activeIndex === 0 ? "high" : undefined}
+          />
         </Link>
         {immersive && photoActive && (
           <Suspense fallback={null}>
@@ -232,7 +246,7 @@ export function ListingCard({
           <div
             className="listing-photo-navigation"
             role="group"
-            aria-label={`Фотографии: ${listing.title}`}
+            aria-label={tr("Фотографии: {0}", listing.title)}
           >
             <span className="listing-photo-count">
               <Images size={12} />
@@ -243,7 +257,7 @@ export function ListingCard({
             <div>
               <button
                 type="button"
-                aria-label={`Предыдущее фото: ${listing.title}`}
+                aria-label={tr("Предыдущее фото: {0}", listing.title)}
                 onClick={() =>
                   setPhotoIndex(
                     (activeIndex - 1 + photos.length) % photos.length,
@@ -254,7 +268,7 @@ export function ListingCard({
               </button>
               <button
                 type="button"
-                aria-label={`Следующее фото: ${listing.title}`}
+                aria-label={tr("Следующее фото: {0}", listing.title)}
                 onClick={() => setPhotoIndex((activeIndex + 1) % photos.length)}
               >
                 <ChevronRight size={15} />
@@ -264,7 +278,7 @@ export function ListingCard({
         )}
         <button
           className={`save-button ${saved ? "saved" : ""}`}
-          aria-label={saved ? "Убрать из избранного" : "В избранное"}
+          aria-label={saved ? tr("Убрать из избранного") : tr("В избранное")}
           aria-pressed={saved}
           aria-busy={busy}
           disabled={busy}
@@ -298,7 +312,7 @@ export function ListingCard({
                 <strong
                   className={`source-price${listing.source.priceKnown ? "" : " source-price-unlisted"}`}
                 >
-                  {listing.source.priceLabel}
+                  {tr(listing.source.priceLabel)}
                 </strong>
                 {!listing.source.priceKnown && (
                   <span className="mobile-source-price">
@@ -312,7 +326,7 @@ export function ListingCard({
               <>
                 <span className="muted small">{t.from} </span>
                 <strong>{euro(listing.price)}</strong>
-                <span className="muted small"> / {listing.unit}</span>
+                <span className="muted small"> / {tr(listing.unit)}</span>
               </>
             )}
           </div>
@@ -332,19 +346,16 @@ export function ListingCard({
           {listing.source && (
             <time
               dateTime={listing.source.postedAt}
-              title={new Intl.DateTimeFormat("ru-RU", {
-                dateStyle: "long",
-              }).format(new Date(listing.source.postedAt))}
+              title={date(listing.source.postedAt, "long")}
             >
-              {new Intl.DateTimeFormat("ru-RU", {
-                day: "numeric",
-                month: "short",
-              }).format(new Date(listing.source.postedAt))}
+              {date(listing.source.postedAt, "short")}
             </time>
           )}
         </div>
         {listing.hidden && (
-          <span className="listing-moderation-label">Скрыто оператором</span>
+          <span className="listing-moderation-label">
+            {tr("Скрыто оператором")}
+          </span>
         )}
         <div className="provider-line">
           <span className="mini-avatar">{initial}</span>
@@ -353,13 +364,17 @@ export function ListingCard({
             <BadgeCheck
               size={14}
               className="green"
-              aria-label="Профиль с отметкой"
+              aria-label={tr("Профиль с отметкой")}
             />
           )}
           {!listing.source && listing.reviewCount > 0 && (
             <span
               className="listing-provider-rating"
-              aria-label={`Рейтинг ${listing.providerRating.toFixed(1)}, отзывов: ${listing.reviewCount}`}
+              aria-label={tr(
+                "Рейтинг {0}, отзывов: {1}",
+                listing.providerRating.toFixed(1),
+                listing.reviewCount,
+              )}
             >
               <Star size={12} fill="currentColor" />
               {listing.providerRating.toFixed(1)}
@@ -367,7 +382,7 @@ export function ListingCard({
             </span>
           )}
           {!listing.source && listing.reviewCount === 0 && (
-            <span className="listing-no-reviews">Без отзывов</span>
+            <span className="listing-no-reviews">{tr("Без отзывов")}</span>
           )}
         </div>
       </div>
@@ -386,10 +401,10 @@ export function ListingCard({
             className={`compare-choice ${compared ? "is-selected" : ""}`}
             aria-pressed={compared}
             onClick={onCompare}
-            aria-label={`${compared ? "Убрать из сравнения" : "Сравнить"}: ${listing.title}`}
+            aria-label={`${compared ? tr("Убрать из сравнения") : tr("Сравнить")}: ${listing.title}`}
           >
             {compared ? <Check size={15} /> : <Columns3 size={15} />}
-            <span>{compared ? "Выбрано" : "Сравнить"}</span>
+            <span>{compared ? tr("Выбрано") : tr("Сравнить")}</span>
           </button>
         )}
       </div>
@@ -414,10 +429,11 @@ export function Field({
   );
 }
 export function FormError({ message }: { message?: string }) {
+  const tr = useUiText();
   return message ? (
     <div className="form-error" role="alert">
       <CircleAlert size={16} />
-      {message}
+      {tr(message)}
     </div>
   ) : null;
 }
